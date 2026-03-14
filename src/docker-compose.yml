@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # --- VERİ TABANI ---
+  mongodb:
+    image: mongo:latest
+    container_name: shared_mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - internal_network
+
+  # --- MİKROSERVİSLER ---
+  auth_service:
+    build: ./auth_service
+    container_name: auth_service
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/auth_db
+    networks:
+      - internal_network
+    depends_on:
+      - mongodb
+
+  product_service:
+    build: ./product_service
+    container_name: product_service
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/product_db
+    networks:
+      - internal_network
+    depends_on:
+      - mongodb
+
+  order_service:
+    build: ./order_service
+    container_name: order_service
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/order_db
+    networks:
+      - internal_network
+    depends_on:
+      - mongodb
+
+  # --- API GATEWAY (TEK GİRİŞ NOKTASI) ---
+  dispatcher:
+    build: ./dispatcher
+    container_name: dispatcher
+    ports:
+      - "8000:8000" # Sadece Dispatcher dışarıya (host) açık!
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/dispatcher_db
+      - AUTH_SERVICE_URL=http://auth_service:8000
+      - PRODUCT_SERVICE_URL=http://product_service:8000
+      - ORDER_SERVICE_URL=http://order_service:8000
+    networks:
+      - internal_network
+    depends_on:
+      - auth_service
+      - product_service
+      - order_service
+
+networks:
+  internal_network:
+    driver: bridge
