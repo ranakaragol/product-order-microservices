@@ -1,54 +1,66 @@
 version: '3.8'
 
 services:
-  # --- VERİ TABANI ---
-  mongodb:
+  # 1. AUTH SERVİSİ VE VERİTABANI
+  auth_mongo:
     image: mongo:latest
-    container_name: shared_mongo
-    ports:
-      - "27017:27017"
+    container_name: auth_mongo
     networks:
       - internal_network
+    # Portlara sadece iç ağdan erişilebilir
 
-  # --- MİKROSERVİSLER ---
   auth_service:
     build: ./auth_service
     container_name: auth_service
     environment:
-      - MONGO_URL=mongodb://mongodb:27017/auth_db
+      # Kendi izole veritabanına bağlanıyor
+      - MONGO_URL=mongodb://auth_mongo:27017/auth_db
     networks:
       - internal_network
     depends_on:
-      - mongodb
+      - auth_mongo
+
+  # 2. PRODUCT SERVİSİ VE VERİTABANI
+  product_mongo:
+    image: mongo:latest
+    container_name: product_mongo
+    networks:
+      - internal_network
 
   product_service:
     build: ./product_service
     container_name: product_service
     environment:
-      - MONGO_URL=mongodb://mongodb:27017/product_db
+      - MONGO_URL=mongodb://product_mongo:27017/product_db
     networks:
       - internal_network
     depends_on:
-      - mongodb
+      - product_mongo
+
+  # 3. ORDER SERVİSİ VE VERİTABANI
+  order_mongo:
+    image: mongo:latest
+    container_name: order_mongo
+    networks:
+      - internal_network
 
   order_service:
     build: ./order_service
     container_name: order_service
     environment:
-      - MONGO_URL=mongodb://mongodb:27017/order_db
+      - MONGO_URL=mongodb://order_mongo:27017/order_db
     networks:
       - internal_network
     depends_on:
-      - mongodb
+      - order_mongo
 
-  # --- API GATEWAY (TEK GİRİŞ NOKTASI) ---
+  # 4. API GATEWAY - DISPATCHER
   dispatcher:
     build: ./dispatcher
     container_name: dispatcher
     ports:
-      - "8000:8000" # Sadece Dispatcher dışarıya (host) açık!
+      - "8000:8000" # Sistemin Dış Dünyaya Açılan Tek Kapısı
     environment:
-      - MONGO_URL=mongodb://mongodb:27017/dispatcher_db
       - AUTH_SERVICE_URL=http://auth_service:8000
       - PRODUCT_SERVICE_URL=http://product_service:8000
       - ORDER_SERVICE_URL=http://order_service:8000
