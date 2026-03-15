@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
+from .core.security import create_access_token
 
 app = FastAPI()
 
@@ -13,7 +14,8 @@ class LoginRequest(BaseModel):
 def login(request: LoginRequest):
     #Doğru kullanıcı adı ve şifre
     if request.username=="admin" and request.password=="password123":
-        return {"access_token": "super-secret-jwt-token", "token_type": "bearer"}
+        access_token=create_access_token(data={"sub": request.username})
+        return {"access_token": access_token, "token_type": "bearer"}
     #Yanlış bilgide 401 Yetkisiz hatası
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
