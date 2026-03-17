@@ -4,7 +4,7 @@ from app.main import app
 
 pytestmark=pytest.mark.asyncio(loop_scope="function")
 
-async def test_missin_token_returns_401():
+async def test_missing_token_returns_401():
     """Header'da token yoksa dispatcher 401 dönmeli"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response=await ac.get("/products/list")

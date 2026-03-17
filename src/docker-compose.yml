@@ -57,6 +57,11 @@ services:
       - order_mongo
 
   # 4. API GATEWAY - DISPATCHER
+  dispatcher_mongo:
+    image: mongo:latest
+    container_name: dispatcher_mongo
+    networks:
+      - internal_network
   dispatcher:
     build: ./dispatcher
     container_name: dispatcher
@@ -66,6 +71,7 @@ services:
       - AUTH_SERVICE_URL=http://auth_service:8000
       - PRODUCT_SERVICE_URL=http://product_service:8000
       - ORDER_SERVICE_URL=http://order_service:8000
+      - MONGO_URL=mongodb://dispatcher_mongo27017/dispatcher_db
     networks:
       - internal_network
     depends_on:

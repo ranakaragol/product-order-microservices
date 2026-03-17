@@ -1,5 +1,6 @@
 import os
 import httpx
+import logging
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.core.security import is_authorized
@@ -12,14 +13,23 @@ PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://localhost:8001")
 ORDER_SERVICE_URL=os.getenv("ORDER_SERVICE_URL", "http://localhost:8002")
 AUTH_SERVICE_URL=os.getenv("AUTH_SERVICE_URL","http://localhost:8000")
 
+logging.basicConfig(level=logging.INFO)
+logger=logging.getLogger("dispatcher")
+
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
-    #Tüm gelen istekler için tek merkezli yetkilendirme kontrolü
+    #Tüm gelen istekler içi merkezli yetkilendirme kontrolü
+    logger.info(f"Incoming request: {request.method} {request.url}")
+
+    if request.url.path.startswith("/auth"):
+        return await call_next(request)
     if not is_authorized(request):
+        logger.warning("Unauthorized access attempt")
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     
     #Her şey doğruysa veya rota başka bir yerse, isteğin geçmesine izin ver
     response= await call_next(request)
+    logger.info(f"Response status: {response.status_code}")
     return response
 
 
@@ -61,7 +71,7 @@ async def route_products(path:str, request: Request):
 async def route_orders(path:str, request:Request):
     url=f"{ORDER_SERVICE_URL}/orders/{path}"
     return await forward_request(request.method, url, request)
-@app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def route_auth(path:str, request:Request):
     #Dispatcher üzerinden login-register olmak isteyenleri auth servisinde yönlendir
     url=f"{AUTH_SERVICE_URL}/{path}"

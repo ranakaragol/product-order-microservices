@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from app.core.database import users_collection
 from app.core.security import verify_password, create_access_token, get_password_hash, verify_token
 
-
 app = FastAPI()
 #Kullanıcıdan gelecek giriş bilgilerinin modelini tanımlıyoruz
 class LoginRequest(BaseModel):
