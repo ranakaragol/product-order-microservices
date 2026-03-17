@@ -8,10 +8,12 @@ services:
     networks:
       - internal_network
     # Portlara sadece iç ağdan erişilebilir
-
+    #ports:
+    # - "27017:27017"
   auth_service:
     build: ./auth_service
     container_name: auth_service
+    restart: always
     environment:
       # Kendi izole veritabanına bağlanıyor
       - MONGO_URL=mongodb://auth_mongo:27017/auth_db
