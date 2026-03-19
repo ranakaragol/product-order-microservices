@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 import uuid
+import os
 from httpx import ASGITransport, AsyncClient
 from app.main import app
 import motor.motor_asyncio
@@ -9,7 +10,8 @@ import motor.motor_asyncio
 @pytest_asyncio.fixture(loop_scope="function", autouse=True)
 async def setup_db():
     from app import main
-    main.client = motor.motor_asyncio.AsyncIOMotorClient("mongodb://localhost:27017")
+    mongo_url = os.getenv("TEST_MONGO_URL", "mongodb://localhost:27017")
+    main.client = motor.motor_asyncio.AsyncIOMotorClient(mongo_url)
     main.db = main.client["test_auth_db"]
     main.users_collection = main.db["users"]
     yield

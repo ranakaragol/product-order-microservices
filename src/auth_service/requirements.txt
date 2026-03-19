@@ -1,0 +1,5 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+motor==3.6.0
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.0
