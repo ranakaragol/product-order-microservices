@@ -61,9 +61,21 @@ async def route_products(path: str, request: Request):
     return await forward_request(request.method, url, request)
 
 
+@router.api_route("/products", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def route_products_root(request: Request):
+    url = f"{PRODUCT_SERVICE_URL}/products"
+    return await forward_request(request.method, url, request)
+
+
 @router.api_route("/orders/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def route_orders(path: str, request: Request):
     url = f"{ORDER_SERVICE_URL}/orders/{path}"
+    return await forward_request(request.method, url, request)
+
+
+@router.api_route("/orders", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def route_orders_root(request: Request):
+    url = f"{ORDER_SERVICE_URL}/orders"
     return await forward_request(request.method, url, request)
 
 
