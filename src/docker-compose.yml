@@ -14,7 +14,8 @@ services:
     container_name: auth_service
     environment:
       # Kendi izole veritabanına bağlanıyor
-      - MONGO_URL=mongodb://auth_mongo:27017/auth_db
+      - MONGO_URL=${AUTH_MONGO_URL:-mongodb://auth_mongo:27017/auth_db}
+      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
     networks:
       - internal_network
     depends_on:
@@ -31,7 +32,7 @@ services:
     build: ./product_service
     container_name: product_service
     environment:
-      - MONGO_URL=mongodb://product_mongo:27017/product_db
+      - MONGO_URL=${PRODUCT_MONGO_URL:-mongodb://product_mongo:27017/product_db}
     networks:
       - internal_network
     depends_on:
@@ -48,7 +49,7 @@ services:
     build: ./order_service
     container_name: order_service
     environment:
-      - MONGO_URL=mongodb://order_mongo:27017/order_db
+      - MONGO_URL=${ORDER_MONGO_URL:-mongodb://order_mongo:27017/order_db}
     networks:
       - internal_network
     depends_on:
@@ -66,10 +67,11 @@ services:
     ports:
       - "8000:8000" # Sistemin Dış Dünyaya Açılan Tek Kapısı
     environment:
-      - AUTH_SERVICE_URL=http://auth_service:8000
-      - PRODUCT_SERVICE_URL=http://product_service:8000
-      - ORDER_SERVICE_URL=http://order_service:8000
-      - MONGO_URL=mongodb://dispatcher_mongo:27017/dispatcher_db
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth_service:8000}
+      - PRODUCT_SERVICE_URL=${PRODUCT_SERVICE_URL:-http://product_service:8000}
+      - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://order_service:8000}
+      - MONGO_URL=${DISPATCHER_MONGO_URL:-mongodb://dispatcher_mongo:27017/dispatcher_db}
+      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
     networks:
       - internal_network
     depends_on:
