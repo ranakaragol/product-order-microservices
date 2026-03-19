@@ -1,4 +1,5 @@
 import pytest 
+import json
 import httpx
 from httpx import ASGITransport,AsyncClient
 from app.main import app
@@ -126,6 +127,6 @@ async def test_products_forwarding_strips_host_and_preserves_body_and_custom_hea
     assert captured["url"].endswith("/products/item-1")
     assert captured["headers"].get("x-trace-id") == "trace-123"
     assert "host" not in {k.lower(): v for k, v in captured["headers"].items()}
-    assert b'"quantity":2' in captured["content"]
+    assert json.loads(captured["content"]) == {"quantity": 2}
 
     

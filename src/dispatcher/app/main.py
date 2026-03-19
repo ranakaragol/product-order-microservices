@@ -16,6 +16,15 @@ AUTH_SERVICE_URL=os.getenv("AUTH_SERVICE_URL","http://localhost:8000")
 logging.basicConfig(level=logging.INFO)
 logger=logging.getLogger("dispatcher")
 
+
+def _forward_headers(request: Request) -> dict:
+    blocked_headers = {"host", "content-length", "connection"}
+    return {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() not in blocked_headers
+    }
+
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
     #Tüm gelen istekler içi merkezli yetkilendirme kontrolü
@@ -43,7 +52,7 @@ async def forward_request(method:str, url:str, request:Request):
             response= await client.request(
                 method=method,
                 url=url,
-                headers=dict(request.headers),
+                headers=_forward_headers(request),
                 content=body
             )
 
