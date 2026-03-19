@@ -95,4 +95,37 @@ async def test_malformed_bearer_header_returns_401_not_500():
     assert response.status_code == 401
     assert response.json() == {"error": "Unauthorized"}
 
+
+async def test_products_forwarding_strips_host_and_preserves_body_and_custom_headers(monkeypatch):
+    captured = {}
+
+    async def request_impl(method, url, headers=None, content=None):
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = headers or {}
+        captured["content"] = content
+        return DummyResponse(200, payload={"ok": True})
+
+    monkeypatch.setattr(dispatcher_main, "is_authorized", lambda request: True)
+    monkeypatch.setattr(
+        dispatcher_main.httpx,
+        "AsyncClient",
+        lambda: DummyAsyncClient(request_impl),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.patch(
+            "/products/item-1",
+            headers={"X-Trace-Id": "trace-123", "Host": "evil.example"},
+            json={"quantity": 2},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert captured["method"] == "PATCH"
+    assert captured["url"].endswith("/products/item-1")
+    assert captured["headers"].get("x-trace-id") == "trace-123"
+    assert "host" not in {k.lower(): v for k, v in captured["headers"].items()}
+    assert b'"quantity":2' in captured["content"]
+
     
