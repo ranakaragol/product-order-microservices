@@ -21,10 +21,13 @@ def is_authorized(request: Request)->bool:
         auth_header=request.headers.get("Authorization")
 
         #Token hiç yoksa veya Bearer ile başlamıyorsa Reddet
-        if not auth_header or not auth_header.startswith("Bearer"):
+        if not auth_header:
+            return False
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
             return False
         #Bearer sahte_token kısmından sadece token'ı al
-        token=auth_header.split(" ")[1]
+        token=parts[1]
         #Token sahteyse veya süresi geçmişse Reddet
         if not verify_token(token):
             return False
