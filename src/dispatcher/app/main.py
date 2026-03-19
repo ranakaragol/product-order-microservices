@@ -17,13 +17,44 @@ logging.basicConfig(level=logging.INFO)
 logger=logging.getLogger("dispatcher")
 
 
-def _forward_headers(request: Request) -> dict:
-    blocked_headers = {"host", "content-length", "connection"}
-    return {
-        key: value
-        for key, value in request.headers.items()
-        if key.lower() not in blocked_headers
-    }
+class RequestForwarder:
+    """Forwards incoming requests to target microservices."""
+
+    _blocked_headers = {"host", "content-length", "connection"}
+
+    def _forward_headers(self, request: Request) -> dict:
+        return {
+            key: value
+            for key, value in request.headers.items()
+            if key.lower() not in self._blocked_headers
+        }
+
+    async def forward(self, method: str, url: str, request: Request) -> JSONResponse:
+        try:
+            async with httpx.AsyncClient() as client:
+                body = await request.body()
+                response = await client.request(
+                    method=method,
+                    url=url,
+                    headers=self._forward_headers(request),
+                    content=body,
+                )
+
+            try:
+                resp_content = response.json()
+            except Exception:
+                resp_content = {"detail": response.text}
+
+            return JSONResponse(status_code=response.status_code, content=resp_content)
+
+        except httpx.RequestError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Hedef servise şu an ulaşılamıyor (Service Unavailable).",
+            )
+
+
+request_forwarder = RequestForwarder()
 
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
@@ -44,33 +75,8 @@ async def check_auth(request: Request, call_next):
 
 #YÖNLENDİRME-ROUTING İŞLEMLERİ
 async def forward_request(method:str, url:str, request:Request):
-    """İstekleri diğer servislere ileten ve çökmeleri yöneten ortak fonksiyon"""
-    try:
-        async with httpx.AsyncClient() as client:
-            #Gelen isteğin body ve header'larını aynen iletiyoruz
-            body=await request.body()
-            response= await client.request(
-                method=method,
-                url=url,
-                headers=_forward_headers(request),
-                content=body
-            )
-
-        #Arka plandaki servis hata döndüyse bunu json olarak ilet
-        try:
-            resp_content=response.json()
-        except:
-            resp_content={"detail": response.text}
-        
-        return JSONResponse(status_code=response.status_code, content=resp_content)
-    
-
-    except httpx.RequestError:
-        #Ulaşılmayan servisler için HTTP 503 dönmeli
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Hedef servise şu an ulaşılamıyor (Service Unavailable)."
-        )
+    """Backwards-compatible forwarding wrapper used by route handlers."""
+    return await request_forwarder.forward(method=method, url=url, request=request)
     
 @app.api_route("/products/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def route_products(path:str, request: Request):
