@@ -23,6 +23,20 @@ services:
     depends_on:
       - auth_mongo
 
+  auth_service_tests:
+    build: ./auth_service
+    profiles:
+      - test
+    environment:
+      - TEST_MONGO_URL=${TEST_AUTH_MONGO_URL:-mongodb://auth_mongo:27017}
+      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+    depends_on:
+      - auth_mongo
+    networks:
+      - internal_network
+    command: >
+      sh -c "pip install --no-cache-dir -r /requirements-dev.txt && pytest tests -q"
+
   # 2. PRODUCT SERVİSİ VE VERİTABANI
   product_mongo:
     image: mongo:7.0
@@ -80,6 +94,21 @@ services:
       - auth_service
       - product_service
       - order_service
+
+  dispatcher_tests:
+    build: ./dispatcher
+    profiles:
+      - test
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+    depends_on:
+      - auth_service
+      - product_service
+      - order_service
+    networks:
+      - internal_network
+    command: >
+      sh -c "pip install --no-cache-dir -r /requirements-dev.txt && pytest tests -q"
 
 networks:
   internal_network:
