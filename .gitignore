@@ -55,6 +55,11 @@ cover/
 *.mo
 *.pot
 
+# LocalContext Files
+src/AGENTS.md
+src/LLM_GLOBAL_RULES.md
+src/PROJECT_SPEC.md
+
 # Django stuff:
 *.log
 local_settings.py
