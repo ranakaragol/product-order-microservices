@@ -2,6 +2,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
+from fastapi import Request
 from app.main import app
 from app import main as dispatcher_main
 
@@ -82,4 +83,54 @@ async def test_auth_proxy_returns_503_when_upstream_unreachable(monkeypatch):
     assert response.status_code == 503
     assert response.json() == {"error": "Service Unavailable"}
 
-    
+@pytest.mark.asyncio(loop_scope="function")
+async def test_products_route_is_forwarded(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        # Dispatcher doğru servise yönlendiriyor mu?
+        assert base_url.endswith("product_service:8000")
+        assert path == ""
+        return 200, {"message": "product ok"}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/products")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "product ok"}
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_orders_route_is_forwarded(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        assert base_url.endswith("order_service:8000")
+        assert path == ""
+        return 200, {"message": "order ok"}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/orders")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "order ok"}
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_unknown_route_returns_404():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/unknown")
+
+    assert response.status_code == 404
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_body_passthrough(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        body = await request.json()
+        assert body == {"name": "test-product"}
+        return 200, {"ok": True}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/products", json={"name": "test-product"})
+
+    assert response.status_code == 200
