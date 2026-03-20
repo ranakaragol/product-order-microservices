@@ -7,8 +7,8 @@ SECRET_KEY=os.getenv("SECRET_KEY", "yazlab-secret-key")
 ALGORITHM="HS256"
 PROTECTED_PREFIXES = ("/products", "/orders")
 ALLOWED_METHODS = {
-    "/products": {"GET"},
-    "/orders": {"GET"},
+    "/products": {"GET", "POST"},
+    "/orders": {"GET", "POST"},
 }
 
 def verify_token(token:str):

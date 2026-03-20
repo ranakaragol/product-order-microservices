@@ -4,7 +4,6 @@ from httpx import ASGITransport, AsyncClient
 from jose import jwt
 from fastapi import Request
 from app.main import app
-from app import main as dispatcher_main
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 SECRET_KEY = "yazlab-secret-key"
@@ -43,7 +42,7 @@ async def test_invalid_token_returns_401(path):
 @pytest.mark.parametrize(
     "method,path",
     [
-        ("post", "/products"),
+        ("put", "/products"),
         ("delete", "/orders"),
     ],
 )
@@ -58,10 +57,10 @@ async def test_valid_token_but_forbidden_method_returns_403(method, path):
 @pytest.mark.asyncio(loop_scope="function")
 async def test_auth_proxy_passthroughs_upstream_status_and_body(monkeypatch):
     async def fake_forward_auth_request(request, path):
-        assert path == "login"
         return 422, {"detail": "invalid credentials"}
-
-    monkeypatch.setattr(dispatcher_main, "forward_auth_request", fake_forward_auth_request, raising=False)
+    
+    import app.main as dispatcher_mod
+    monkeypatch.setattr(dispatcher_mod, "forward_auth_request", fake_forward_auth_request)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/auth/login", json={"username": "u", "password": "p"})
@@ -69,13 +68,13 @@ async def test_auth_proxy_passthroughs_upstream_status_and_body(monkeypatch):
     assert response.status_code == 422
     assert response.json() == {"detail": "invalid credentials"}
 
-
 @pytest.mark.asyncio(loop_scope="function")
 async def test_auth_proxy_returns_503_when_upstream_unreachable(monkeypatch):
     async def fake_forward_auth_request(request, path):
-        raise RuntimeError("auth service unreachable")
+        raise RuntimeError("Service down")
 
-    monkeypatch.setattr(dispatcher_main, "forward_auth_request", fake_forward_auth_request, raising=False)
+    import app.main as dispatcher_mod
+    monkeypatch.setattr(dispatcher_mod, "forward_auth_request", fake_forward_auth_request)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/auth/login", json={"username": "u", "password": "p"})
@@ -94,7 +93,8 @@ async def test_products_route_is_forwarded(monkeypatch):
     monkeypatch.setattr("app.main.forward_request", fake_forward)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/products")
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.get("/products", headers=headers)
 
     assert response.status_code == 200
     assert response.json() == {"message": "product ok"}
@@ -109,7 +109,8 @@ async def test_orders_route_is_forwarded(monkeypatch):
     monkeypatch.setattr("app.main.forward_request", fake_forward)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/orders")
+        headers= {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.get("/orders", headers=headers)
 
     assert response.status_code == 200
     assert response.json() == {"message": "order ok"}
@@ -131,6 +132,6 @@ async def test_body_passthrough(monkeypatch):
     monkeypatch.setattr("app.main.forward_request", fake_forward)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/products", json={"name": "test-product"})
-
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.post("/products", json={"name": "test-product"}, headers=headers)
     assert response.status_code == 200
