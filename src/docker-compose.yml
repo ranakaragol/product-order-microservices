@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   # 1. AUTH SERVİSİ VE VERİTABANI
   auth_mongo:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: auth_mongo
     networks:
       - internal_network
@@ -14,7 +12,8 @@ services:
     container_name: auth_service
     environment:
       # Kendi izole veritabanına bağlanıyor
-      - MONGO_URL=mongodb://auth_mongo:27017/auth_db
+      - MONGO_URL=${AUTH_MONGO_URL:-mongodb://auth_mongo:27017/auth_db}
+      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
     networks:
       - internal_network
     depends_on:
@@ -22,7 +21,7 @@ services:
 
   # 2. PRODUCT SERVİSİ VE VERİTABANI
   product_mongo:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: product_mongo
     networks:
       - internal_network
@@ -31,7 +30,7 @@ services:
     build: ./product_service
     container_name: product_service
     environment:
-      - MONGO_URL=mongodb://product_mongo:27017/product_db
+      - MONGO_URL=${PRODUCT_MONGO_URL:-mongodb://product_mongo:27017/product_db}
     networks:
       - internal_network
     depends_on:
@@ -39,7 +38,7 @@ services:
 
   # 3. ORDER SERVİSİ VE VERİTABANI
   order_mongo:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: order_mongo
     networks:
       - internal_network
@@ -48,22 +47,29 @@ services:
     build: ./order_service
     container_name: order_service
     environment:
-      - MONGO_URL=mongodb://order_mongo:27017/order_db
+      - MONGO_URL=${ORDER_MONGO_URL:-mongodb://order_mongo:27017/order_db}
     networks:
       - internal_network
     depends_on:
       - order_mongo
 
   # 4. API GATEWAY - DISPATCHER
+  dispatcher_mongo:
+    image: mongo:7.0
+    container_name: dispatcher_mongo
+    networks:
+      - internal_network
   dispatcher:
     build: ./dispatcher
     container_name: dispatcher
     ports:
       - "8000:8000" # Sistemin Dış Dünyaya Açılan Tek Kapısı
     environment:
-      - AUTH_SERVICE_URL=http://auth_service:8000
-      - PRODUCT_SERVICE_URL=http://product_service:8000
-      - ORDER_SERVICE_URL=http://order_service:8000
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth_service:8000}
+      - PRODUCT_SERVICE_URL=${PRODUCT_SERVICE_URL:-http://product_service:8000}
+      - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://order_service:8000}
+      - MONGO_URL=${DISPATCHER_MONGO_URL:-mongodb://dispatcher_mongo:27017/dispatcher_db}
+      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
     networks:
       - internal_network
     depends_on:
