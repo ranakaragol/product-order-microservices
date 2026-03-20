@@ -19,8 +19,10 @@ async def check_auth(request: Request, call_next):
     if request.url.path.startswith("/auth"):
         return await call_next(request)
     if not is_authorized(request):
+        status_code = getattr(request.state, "auth_status_code", 401)
         logger.warning("Unauthorized access attempt")
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        error = "Unauthorized" if status_code == 401 else "Forbidden"
+        return JSONResponse(status_code=status_code, content={"error": error})
     
     #Her şey doğruysa veya rota başka bir yerse, isteğin geçmesine izin ver
     response= await call_next(request)
