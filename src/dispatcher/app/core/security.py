@@ -58,7 +58,7 @@ def is_authorized(request: Request)->bool:
     return True
 
 
-def authorization_status_code(request: Request) -> int:
+def evaluate_authorization(request: Request) -> int:
     if not _is_protected_path(request.url.path):
         return 200
 

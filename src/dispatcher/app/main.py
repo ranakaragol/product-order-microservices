@@ -1,12 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from app.core.security import authorization_status_code
+from app.core.security import evaluate_authorization
 
 app= FastAPI()
 
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
-    status_code = authorization_status_code(request)
+    status_code = evaluate_authorization(request)
     if status_code == 401:
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if status_code == 403:
