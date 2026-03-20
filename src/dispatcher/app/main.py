@@ -1,14 +1,16 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from app.core.security import is_authorized
+from app.core.security import authorization_status_code
 
 app= FastAPI()
 
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
-    #yetkisiz bir işlemse 401 dönmeli
-    if not is_authorized(request):
+    status_code = authorization_status_code(request)
+    if status_code == 401:
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    if status_code == 403:
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
     
     #Her şey doğruysa veya rota başka bir yerse, isteğin geçmesine izin ver
     response= await call_next(request)

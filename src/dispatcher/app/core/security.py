@@ -6,6 +6,10 @@ from jose import JWTError, jwt
 SECRET_KEY=os.getenv("SECRET_KEY", "yazlab-secret-key")
 ALGORITHM="HS256"
 PROTECTED_PREFIXES = ("/products", "/orders")
+ALLOWED_METHODS = {
+    "/products": {"GET"},
+    "/orders": {"GET"},
+}
 
 def verify_token(token:str):
     """Token'ı çözer, sahteyse veya süresi dolmuşsa None döner"""
@@ -18,6 +22,13 @@ def verify_token(token:str):
 
 def _is_protected_path(path: str) -> bool:
     return path.startswith(PROTECTED_PREFIXES)
+
+
+def _is_method_allowed(path: str, method: str) -> bool:
+    for prefix, methods in ALLOWED_METHODS.items():
+        if path.startswith(prefix):
+            return method.upper() in methods
+    return True
 
 
 def _extract_bearer_token(auth_header: str | None) -> str | None:
@@ -45,3 +56,16 @@ def is_authorized(request: Request)->bool:
         
     #Diğer rotalariçin şimdilik izin ver
     return True
+
+
+def authorization_status_code(request: Request) -> int:
+    if not _is_protected_path(request.url.path):
+        return 200
+
+    if not is_authorized(request):
+        return 401
+
+    if not _is_method_allowed(request.url.path, request.method):
+        return 403
+
+    return 200
