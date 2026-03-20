@@ -1,11 +1,13 @@
 import pytest 
 import json
 import httpx
+from jose import jwt
 from urllib.parse import urlsplit
 from httpx import ASGITransport,AsyncClient
 from fastapi import FastAPI, HTTPException
 from app.main import app
 import app.main as dispatcher_main
+from app.core.security import SECRET_KEY, ALGORITHM
 
 pytestmark=pytest.mark.asyncio(loop_scope="function")
 
@@ -337,5 +339,71 @@ async def test_gateway_order_crud_flow(product_order_gateway_setup):
     assert patch_one.json()["status"] == "completed"
     assert delete_one.status_code == 204
     assert missing.status_code == 404
+
+
+async def test_user_named_admin_without_profile_cannot_write_products(monkeypatch):
+    captured = []
+
+    async def request_impl(method, url, headers=None, content=None):
+        captured.append((method, url))
+        return DummyResponse(200, payload={"ok": True})
+
+    monkeypatch.setattr(
+        dispatcher_main.httpx,
+        "AsyncClient",
+        lambda: DummyAsyncClient(request_impl),
+    )
+
+    token = jwt.encode({"sub": "admin"}, SECRET_KEY, algorithm=ALGORITHM)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post(
+            "/products",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Unsafe", "price": 10.0, "stock": 1},
+        )
+
+    assert response.status_code == 403
+    assert len(captured) == 0
+
+
+async def test_bootstrap_profile_allows_products_get_but_blocks_products_post(monkeypatch):
+    captured = []
+
+    async def request_impl(method, url, headers=None, content=None):
+        captured.append((method, url))
+        return DummyResponse(200, payload={"ok": True})
+
+    monkeypatch.setenv(
+        "DISPATCHER_ACCESS_PROFILES_JSON",
+        json.dumps(
+            [
+                {
+                    "username": "bootstrap-user",
+                    "roles": ["order_reader"],
+                    "service_permissions": {"products": ["GET"]},
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        dispatcher_main.httpx,
+        "AsyncClient",
+        lambda: DummyAsyncClient(request_impl),
+    )
+
+    token = jwt.encode({"sub": "bootstrap-user", "roles": []}, SECRET_KEY, algorithm=ALGORITHM)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        products_get = await ac.get("/products/list", headers=headers)
+        products_post = await ac.post(
+            "/products",
+            headers=headers,
+            json={"name": "Blocked", "price": 11.0, "stock": 1},
+        )
+
+    assert products_get.status_code == 200
+    assert products_post.status_code == 403
+    assert len(captured) == 1
 
     
