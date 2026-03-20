@@ -1,4 +1,5 @@
 import os
+import logging
 import httpx
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -8,6 +9,7 @@ ORDER_SERVICE_URL = os.getenv("ORDER_SERVICE_URL", "http://localhost:8002")
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://localhost:8000")
 
 router = APIRouter()
+logger = logging.getLogger("dispatcher.gateway")
 
 
 class RequestForwarder:
@@ -23,7 +25,15 @@ class RequestForwarder:
         }
 
     async def forward(self, method: str, url: str, request: Request) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", "unknown")
         try:
+            logger.info(
+                "forwarding_request request_id=%s method=%s path=%s upstream=%s",
+                request_id,
+                method,
+                request.url.path,
+                url,
+            )
             async with httpx.AsyncClient() as client:
                 body = await request.body()
                 response = await client.request(
@@ -40,7 +50,15 @@ class RequestForwarder:
 
             return JSONResponse(status_code=response.status_code, content=resp_content)
 
-        except httpx.RequestError:
+        except httpx.RequestError as exc:
+            logger.error(
+                "upstream_unreachable request_id=%s method=%s path=%s upstream=%s error=%s",
+                request_id,
+                method,
+                request.url.path,
+                url,
+                exc,
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Hedef servise şu an ulaşılamıyor (Service Unavailable).",

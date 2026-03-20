@@ -1,13 +1,50 @@
 import pytest 
 import json
 import httpx
+from jose import jwt
 from urllib.parse import urlsplit
 from httpx import ASGITransport,AsyncClient
 from fastapi import FastAPI, HTTPException
 from app.main import app
 import app.main as dispatcher_main
+import app.gateway as dispatcher_gateway
+from app.core.access_control import AuthorizationDecision, AuthorizationService
+from app.core.security import SECRET_KEY, ALGORITHM
+from app.repositories.access_profile_repository import AccessProfileRepository
 
 pytestmark=pytest.mark.asyncio(loop_scope="function")
+
+
+class AllowAllAuthorizationService:
+    async def authorize_request(self, request):
+        return AuthorizationDecision(
+            allowed=True,
+            status_code=200,
+            message="authorized",
+            context={"user": "test-user", "target_service": "test"},
+        )
+
+
+class DenyProductsWriteAuthorizationService:
+    async def authorize_request(self, request):
+        if request.url.path.startswith("/products") and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            return AuthorizationDecision(
+                allowed=False,
+                status_code=403,
+                message="forbidden_for_products_write",
+                context={"user": "readonly-user", "target_service": "products"},
+            )
+        return AuthorizationDecision(
+            allowed=True,
+            status_code=200,
+            message="authorized",
+            context={"user": "readonly-user", "target_service": "products"},
+        )
+
+
+class AlwaysNoneCollection:
+    async def find_one(self, query, projection):
+        return None
 
 async def test_missing_token_returns_401():
     """Header'da token yoksa dispatcher 401 dönmeli"""
@@ -62,7 +99,7 @@ async def test_auth_forwarding_passes_upstream_status_and_json(monkeypatch):
         return DummyResponse(422, payload={"detail": "bad payload"})
 
     monkeypatch.setattr(
-        dispatcher_main.httpx,
+        dispatcher_gateway.httpx,
         "AsyncClient",
         lambda: DummyAsyncClient(request_impl),
     )
@@ -79,7 +116,7 @@ async def test_auth_forwarding_returns_503_when_upstream_unreachable(monkeypatch
         raise httpx.RequestError("service down")
 
     monkeypatch.setattr(
-        dispatcher_main.httpx,
+        dispatcher_gateway.httpx,
         "AsyncClient",
         lambda: DummyAsyncClient(request_impl),
     )
@@ -109,9 +146,9 @@ async def test_products_forwarding_strips_host_and_preserves_body_and_custom_hea
         captured["content"] = content
         return DummyResponse(200, payload={"ok": True})
 
-    monkeypatch.setattr(dispatcher_main, "is_authorized", lambda request: True)
+    monkeypatch.setattr(dispatcher_main, "_authorization_service", AllowAllAuthorizationService())
     monkeypatch.setattr(
-        dispatcher_main.httpx,
+        dispatcher_gateway.httpx,
         "AsyncClient",
         lambda: DummyAsyncClient(request_impl),
     )
@@ -248,9 +285,9 @@ def product_order_gateway_setup(monkeypatch):
             raise HTTPException(status_code=404, detail="Order not found")
         del order_store[order_id]
 
-    monkeypatch.setattr(dispatcher_main, "is_authorized", lambda request: True)
+    monkeypatch.setattr(dispatcher_main, "_authorization_service", AllowAllAuthorizationService())
     monkeypatch.setattr(
-        dispatcher_main.httpx,
+        dispatcher_gateway.httpx,
         "AsyncClient",
         lambda: MultiServiceAsyncClient(
             {
@@ -337,5 +374,80 @@ async def test_gateway_order_crud_flow(product_order_gateway_setup):
     assert patch_one.json()["status"] == "completed"
     assert delete_one.status_code == 204
     assert missing.status_code == 404
+
+
+async def test_user_named_admin_without_profile_cannot_write_products(monkeypatch):
+    monkeypatch.setenv("DISPATCHER_ACCESS_PROFILES_JSON", "[]")
+
+    repository = AccessProfileRepository()
+    repository._collection = AlwaysNoneCollection()
+    monkeypatch.setattr(
+        dispatcher_main,
+        "_authorization_service",
+        AuthorizationService(access_profile_repository=repository),
+    )
+
+    captured = []
+
+    async def request_impl(method, url, headers=None, content=None):
+        captured.append((method, url))
+        return DummyResponse(200, payload={"ok": True})
+
+    monkeypatch.setattr(dispatcher_gateway.httpx, "AsyncClient", lambda: DummyAsyncClient(request_impl))
+
+    token = jwt.encode({"sub": "admin"}, SECRET_KEY, algorithm=ALGORITHM)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post(
+            "/products",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Unsafe", "price": 10.0, "stock": 1},
+        )
+
+    assert response.status_code == 403
+    assert len(captured) == 0
+
+
+async def test_bootstrap_profile_allows_products_get_but_blocks_products_post(monkeypatch):
+    captured = []
+
+    async def request_impl(method, url, headers=None, content=None):
+        captured.append((method, url))
+        return DummyResponse(200, payload={"ok": True})
+
+    monkeypatch.setenv(
+        "DISPATCHER_ACCESS_PROFILES_JSON",
+        json.dumps(
+            [
+                {
+                    "username": "bootstrap-user",
+                    "roles": ["order_reader"],
+                    "service_permissions": {"products": ["GET"]},
+                }
+            ]
+        ),
+    )
+    repository = AccessProfileRepository()
+    repository._collection = AlwaysNoneCollection()
+    monkeypatch.setattr(
+        dispatcher_main,
+        "_authorization_service",
+        AuthorizationService(access_profile_repository=repository),
+    )
+    monkeypatch.setattr(dispatcher_gateway.httpx, "AsyncClient", lambda: DummyAsyncClient(request_impl))
+
+    token = jwt.encode({"sub": "bootstrap-user", "roles": []}, SECRET_KEY, algorithm=ALGORITHM)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        products_get = await ac.get("/products/list", headers=headers)
+        products_post = await ac.post(
+            "/products",
+            headers=headers,
+            json={"name": "Blocked", "price": 11.0, "stock": 1},
+        )
+
+    assert products_get.status_code == 200
+    assert products_post.status_code == 403
+    assert len(captured) == 1
 
     

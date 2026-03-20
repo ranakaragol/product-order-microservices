@@ -1,10 +1,8 @@
-import os 
-from fastapi import Request
+import os
 from jose import JWTError, jwt
 
-#Token'ları çözmek için Auth servisiyle aynı gizli anahtarı kullanılmalı
-SECRET_KEY=os.getenv("SECRET_KEY", "yazlab-secret-key")
-ALGORITHM="HS256"
+SECRET_KEY = os.getenv("SECRET_KEY", "yazlab-secret-key")
+ALGORITHM = "HS256"
 
 class AuthorizationService:
     """Encapsulates authorization checks for dispatcher routes."""
@@ -28,25 +26,14 @@ class AuthorizationService:
             return None
         return parts[1]
 
-    def is_authorized(self, request: Request) -> bool:
-        if request.url.path.startswith("/products") or request.url.path.startswith("/orders"):
-            auth_header = request.headers.get("Authorization")
-            token = self._extract_bearer_token(auth_header)
-            if not token:
-                return False
-            if not self.verify_token(token):
-                return False
-        return True
 
 
 _authorization_service = AuthorizationService(secret_key=SECRET_KEY, algorithm=ALGORITHM)
 
 
 def verify_token(token: str):
-    """Backward-compatible wrapper for token verification."""
     return _authorization_service.verify_token(token)
 
 
-def is_authorized(request: Request) -> bool:
-    """Backward-compatible wrapper for route authorization checks."""
-    return _authorization_service.is_authorized(request)
+def extract_bearer_token(auth_header: str | None) -> str | None:
+    return _authorization_service._extract_bearer_token(auth_header)
