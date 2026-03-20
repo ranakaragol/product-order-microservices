@@ -1,9 +1,9 @@
 import pytest
 from bson import ObjectId
 from httpx import ASGITransport, AsyncClient
-from app.main import app
-from app.routers import products as products_router
 
+from app.main import app
+from app.routers import orders as orders_router
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 
@@ -23,7 +23,7 @@ class FakeResult:
         self.deleted_count = deleted_count
 
 
-class FakeProductsCollection:
+class FakeOrdersCollection:
     def __init__(self):
         self._docs = {}
 
@@ -56,68 +56,69 @@ class FakeProductsCollection:
 
 @pytest.fixture
 def fake_collection():
-    collection = FakeProductsCollection()
-    products_router.products_collection = collection
+    collection = FakeOrdersCollection()
+    orders_router.orders_collection = collection
     return collection
 
 
-async def test_get_products_returns_empty_list_initially(fake_collection):
+async def test_get_orders_returns_empty_list_initially(fake_collection):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/products")
+        response = await ac.get("/orders")
 
     assert response.status_code == 200
     assert response.json() == []
 
 
-async def test_create_and_get_product(fake_collection):
+async def test_create_and_get_order(fake_collection):
     payload = {
-        "name": "Keyboard",
-        "description": "Mechanical",
-        "price": 99.9,
-        "stock": 15,
+        "customer_id": "user-1",
+        "items": [
+            {"product_id": "p-1", "quantity": 2, "unit_price": 10.0},
+            {"product_id": "p-2", "quantity": 1, "unit_price": 15.0},
+        ],
+        "status": "created",
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        create_response = await ac.post("/products", json=payload)
-
+        create_response = await ac.post("/orders", json=payload)
         assert create_response.status_code == 201
         created = create_response.json()
 
-        get_response = await ac.get(f"/products/{created['id']}")
+        get_response = await ac.get(f"/orders/{created['id']}")
 
     assert get_response.status_code == 200
-    assert get_response.json()["name"] == "Keyboard"
+    assert get_response.json()["total_amount"] == 35.0
 
 
-async def test_put_patch_and_delete_product(fake_collection):
+async def test_put_patch_and_delete_order(fake_collection):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         create_response = await ac.post(
-            "/products",
+            "/orders",
             json={
-                "name": "Mouse",
-                "description": "Wireless",
-                "price": 25.0,
-                "stock": 50,
+                "customer_id": "user-2",
+                "items": [{"product_id": "p-3", "quantity": 3, "unit_price": 5.0}],
+                "status": "created",
             },
         )
-        product_id = create_response.json()["id"]
+        order_id = create_response.json()["id"]
 
         put_response = await ac.put(
-            f"/products/{product_id}",
+            f"/orders/{order_id}",
             json={
-                "name": "Mouse Pro",
-                "description": "Wireless Pro",
-                "price": 35.0,
-                "stock": 30,
+                "customer_id": "user-2",
+                "items": [{"product_id": "p-3", "quantity": 4, "unit_price": 5.0}],
+                "status": "processing",
             },
         )
-        patch_response = await ac.patch(f"/products/{product_id}", json={"stock": 20})
-        delete_response = await ac.delete(f"/products/{product_id}")
-        get_after_delete = await ac.get(f"/products/{product_id}")
+
+        patch_response = await ac.patch(f"/orders/{order_id}", json={"status": "completed"})
+        delete_response = await ac.delete(f"/orders/{order_id}")
+        get_after_delete = await ac.get(f"/orders/{order_id}")
 
     assert put_response.status_code == 200
-    assert put_response.json()["name"] == "Mouse Pro"
+    assert put_response.json()["total_amount"] == 20.0
+    assert put_response.json()["status"] == "processing"
     assert patch_response.status_code == 200
-    assert patch_response.json()["stock"] == 20
+    assert patch_response.json()["status"] == "completed"
     assert delete_response.status_code == 204
     assert get_after_delete.status_code == 404
