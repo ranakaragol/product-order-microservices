@@ -7,24 +7,36 @@ from app.core.security import evaluate_authorization
 
 app= FastAPI()
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8000")
+AUTH_PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+
+def _build_auth_upstream_url(path: str) -> str:
+    return f"{AUTH_SERVICE_URL.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _filtered_forward_headers(request: Request) -> dict[str, str]:
+    return {k: v for k, v in request.headers.items() if k.lower() != "host"}
+
+
+def _parse_upstream_payload(upstream_response: httpx.Response):
+    try:
+        return upstream_response.json()
+    except ValueError:
+        return upstream_response.text
 
 
 async def forward_auth_request(request: Request, path: str):
-    url = f"{AUTH_SERVICE_URL.rstrip('/')}/{path.lstrip('/')}"
+    url = _build_auth_upstream_url(path)
     async with httpx.AsyncClient(timeout=10.0) as client:
         upstream_response = await client.request(
             method=request.method,
             url=url,
             params=request.query_params,
             content=await request.body(),
-            headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
+            headers=_filtered_forward_headers(request),
         )
 
-    try:
-        payload = upstream_response.json()
-    except ValueError:
-        payload = upstream_response.text
-
+    payload = _parse_upstream_payload(upstream_response)
     return upstream_response.status_code, payload
 
 @app.middleware("http")
@@ -44,7 +56,7 @@ def read_root():
     return {"message": "Dispatcher Gateway Running"}
 
 
-@app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@app.api_route("/auth/{path:path}", methods=AUTH_PROXY_METHODS)
 async def proxy_auth(path: str, request: Request):
     try:
         status_code, payload = await forward_auth_request(request, path)
