@@ -1,34 +1,38 @@
 import pytest
 import pytest_asyncio
-import uuid
 from httpx import ASGITransport, AsyncClient
 from app.main import app
-import motor.motor_asyncio
 
-# Yeni sürüm pytest-asyncio kullanımı
+
+class FakeUsersCollection:
+    def __init__(self):
+        self._users = {}
+
+    async def find_one(self, query):
+        username = query.get("username")
+        return self._users.get(username)
+
+    async def insert_one(self, document):
+        self._users[document["username"]] = dict(document)
+        return {"inserted_id": document["username"]}
+
 @pytest_asyncio.fixture(loop_scope="function", autouse=True)
 async def setup_db():
     from app import main
-    main.client = motor.motor_asyncio.AsyncIOMotorClient("mongodb://localhost:27017")
-    main.db = main.client["test_auth_db"]
-    main.users_collection = main.db["users"]
+    main.users_collection = FakeUsersCollection()
     yield
-    main.client.close()
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_register_and_login_flow():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        unique_user = f"user_{uuid.uuid4().hex[:6]}"
-        # Kayıt
-        register= await ac.post("/register", json={
-            "username": unique_user,
+        register = await ac.post("/register", json={
+            "username": "user_test_001",
             "password": "testpassword"
         })
-        # Giriş
-        assert register.status_code==200
+        assert register.status_code == 200
 
         login = await ac.post("/login", json={
-            "username": unique_user,
+            "username": "user_test_001",
             "password": "testpassword"
         })
         assert login.status_code == 200
@@ -36,11 +40,16 @@ async def test_register_and_login_flow():
 @pytest.mark.asyncio(loop_scope="function")
 async def test_login_with_wrong_password():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        # Var olmayan kullanıcı
-        response = await ac.post("/login", json={
-            "username": "hic_yok_boyle_biri",
-            "password": "123"
+        register = await ac.post("/register", json={
+            "username": "user_wrong_pwd",
+            "password": "right-password"
         })
-        
-        # Burada uygulamanın döndüğü hata 401 
+        assert register.status_code == 200
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/login", json={
+            "username": "user_wrong_pwd",
+            "password": "wrong-password"
+        })
+
         assert response.status_code == 401
