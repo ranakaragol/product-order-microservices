@@ -65,6 +65,11 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# LocalContext Files
+src/AGENTS.md
+src/LLM_GLOBAL_RULES.md
+src/PROJECT_SPEC.md
+
 # Scrapy stuff:
 .scrapy
 
