@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
 from app.main import app
+from app import main as dispatcher_main
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 SECRET_KEY = "yazlab-secret-key"
@@ -51,5 +52,34 @@ async def test_valid_token_but_forbidden_method_returns_403(method, path):
         response = await request_fn(path, headers={"Authorization": f"Bearer {_valid_token()}"})
     assert response.status_code == 403
     assert response.json() == {"error": "Forbidden"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_auth_proxy_passthroughs_upstream_status_and_body(monkeypatch):
+    async def fake_forward_auth_request(request, path):
+        assert path == "login"
+        return 422, {"detail": "invalid credentials"}
+
+    monkeypatch.setattr(dispatcher_main, "forward_auth_request", fake_forward_auth_request, raising=False)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/auth/login", json={"username": "u", "password": "p"})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "invalid credentials"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_auth_proxy_returns_503_when_upstream_unreachable(monkeypatch):
+    async def fake_forward_auth_request(request, path):
+        raise RuntimeError("auth service unreachable")
+
+    monkeypatch.setattr(dispatcher_main, "forward_auth_request", fake_forward_auth_request, raising=False)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/auth/login", json={"username": "u", "password": "p"})
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "Service Unavailable"}
 
     
