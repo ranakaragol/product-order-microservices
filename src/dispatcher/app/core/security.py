@@ -9,6 +9,7 @@ PROTECTED_PREFIXES = ("/products", "/orders")
 ALLOWED_METHODS = {
     "/products": {"GET", "POST"},
     "/orders": {"GET", "POST"},
+    "/auth":{"POST"},
 }
 
 def verify_token(token:str):
