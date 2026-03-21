@@ -5,6 +5,9 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from app.core.security import evaluate_authorization
 from fastapi import Depends, Request, APIRouter
+from app.core.database import logs_collection
+from app.models.log import TrafficLog
+
 
 app= FastAPI()
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8000")
@@ -73,7 +76,24 @@ async def check_auth(request: Request, call_next):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if status_code == 403:
         return JSONResponse(status_code=403, content={"error": "Forbidden"})
-    return await call_next(request)
+    response= await call_next(request)
+
+    try:
+        path_parts=request.url.path.strip("/").split("/")
+        service_name=path_parts[0] if path_parts else "root"
+
+        log_entry= TrafficLog(
+            method=request.method,
+            path=request.url.path,
+            service=service_name,
+            status_code=response.status_code,
+            client_ip= request.client.host if request.client else "unknown"
+        )
+        await logs_collection.insert_one(log_entry.model_dump())
+    except Exception as e:
+        print(f"Logging error: {e}")
+
+    return response
 
 @app.get("/")
 def read_root():
