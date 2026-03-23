@@ -34,4 +34,6 @@ class ProductService:
         return product
 
     async def delete_product(self, product_id: str):
-        raise NotImplementedError()
+        deleted = await self._repository.delete(product_id)
+        if not deleted:
+            raise ProductNotFoundError()

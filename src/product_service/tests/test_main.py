@@ -46,6 +46,13 @@ class FakeProductsCollection:
         self._docs[object_id].update(update.get("$set", {}))
         return FakeResult(matched_count=1)
 
+    async def delete_one(self, query):
+        object_id = query.get("_id")
+        if object_id in self._docs:
+            del self._docs[object_id]
+            return FakeResult(deleted_count=1)
+        return FakeResult(deleted_count=0)
+
 
 @pytest.fixture
 def fake_collection():
@@ -149,5 +156,34 @@ async def test_put_and_patch_product_return_200(fake_collection):
 async def test_put_patch_return_404_when_missing(fake_collection, method, path, payload):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await getattr(ac, method)(path, json=payload)
+
+    assert response.status_code == 404
+
+
+async def test_delete_product_returns_204(fake_collection):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        create_response = await ac.post(
+            "/products",
+            json={
+                "name": "Laptop",
+                "description": "16GB",
+                "price": 1500.0,
+                "stock": 5,
+            },
+        )
+        product_id = create_response.json()["id"]
+
+        delete_response = await ac.delete(f"/products/{product_id}")
+        get_after_delete = await ac.get(f"/products/{product_id}")
+
+    assert delete_response.status_code == 204
+    assert get_after_delete.status_code == 404
+
+
+async def test_delete_product_returns_404_when_missing(fake_collection):
+    missing_id = "66f2aa4f8ad9ad0d98da1111"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.delete(f"/products/{missing_id}")
 
     assert response.status_code == 404

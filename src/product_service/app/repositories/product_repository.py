@@ -74,4 +74,8 @@ class ProductRepository:
         return Product.from_document(updated)
 
     async def delete(self, product_id: str) -> bool:
-        raise NotImplementedError()
+        if not ObjectId.is_valid(product_id):
+            return False
+
+        result = await self._collection.delete_one({"_id": ObjectId(product_id)})
+        return result.deleted_count > 0

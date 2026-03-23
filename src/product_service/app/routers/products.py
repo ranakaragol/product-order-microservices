@@ -53,3 +53,12 @@ async def patch_product(product_id: str, payload: ProductPatch):
         return await service.patch_product(product_id, payload.model_dump(exclude_unset=True))
     except ProductNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Product not found") from exc
+
+
+@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_product(product_id: str):
+    service = get_product_service()
+    try:
+        await service.delete_product(product_id)
+    except ProductNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Product not found") from exc
