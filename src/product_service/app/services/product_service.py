@@ -10,13 +10,13 @@ class ProductService:
         self._repository = repository
 
     async def list_products(self):
-        raise NotImplementedError()
+        return await self._repository.list_products()
 
     async def get_product(self, product_id: str):
         raise NotImplementedError()
 
     async def create_product(self, data: dict):
-        raise NotImplementedError()
+        return await self._repository.create(data)
 
     async def replace_product(self, product_id: str, data: dict):
         raise NotImplementedError()
