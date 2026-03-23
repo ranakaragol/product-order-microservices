@@ -40,10 +40,38 @@ class ProductRepository:
         return Product.from_document(created)
 
     async def replace(self, product_id: str, data: dict) -> Optional[Product]:
-        raise NotImplementedError()
+        if not ObjectId.is_valid(product_id):
+            return None
+
+        object_id = ObjectId(product_id)
+        replacement = {
+            "name": data["name"],
+            "description": data.get("description"),
+            "price": float(data["price"]),
+            "stock": int(data["stock"]),
+        }
+        result = await self._collection.update_one({"_id": object_id}, {"$set": replacement})
+        if result.matched_count == 0:
+            return None
+
+        updated = await self._collection.find_one({"_id": object_id})
+        return Product.from_document(updated)
 
     async def patch(self, product_id: str, data: dict) -> Optional[Product]:
-        raise NotImplementedError()
+        if not ObjectId.is_valid(product_id):
+            return None
+
+        patch_doc = {key: value for key, value in data.items() if value is not None}
+        if not patch_doc:
+            return await self.get_by_id(product_id)
+
+        object_id = ObjectId(product_id)
+        result = await self._collection.update_one({"_id": object_id}, {"$set": patch_doc})
+        if result.matched_count == 0:
+            return None
+
+        updated = await self._collection.find_one({"_id": object_id})
+        return Product.from_document(updated)
 
     async def delete(self, product_id: str) -> bool:
         raise NotImplementedError()

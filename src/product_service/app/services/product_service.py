@@ -22,10 +22,16 @@ class ProductService:
         return await self._repository.create(data)
 
     async def replace_product(self, product_id: str, data: dict):
-        raise NotImplementedError()
+        product = await self._repository.replace(product_id, data)
+        if not product:
+            raise ProductNotFoundError()
+        return product
 
     async def patch_product(self, product_id: str, data: dict):
-        raise NotImplementedError()
+        product = await self._repository.patch(product_id, data)
+        if not product:
+            raise ProductNotFoundError()
+        return product
 
     async def delete_product(self, product_id: str):
         raise NotImplementedError()

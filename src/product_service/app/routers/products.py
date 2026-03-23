@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.core.database import products_collection as db_products_collection
 from app.repositories.product_repository import ProductRepository
-from app.schemas.product import ProductCreate, ProductResponse
+from app.schemas.product import ProductCreate, ProductPatch, ProductResponse, ProductUpdate
 from app.services.product_service import ProductNotFoundError, ProductService
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -33,5 +33,23 @@ async def get_product(product_id: str):
     service = get_product_service()
     try:
         return await service.get_product(product_id)
+    except ProductNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Product not found") from exc
+
+
+@router.put("/{product_id}", response_model=ProductResponse)
+async def replace_product(product_id: str, payload: ProductUpdate):
+    service = get_product_service()
+    try:
+        return await service.replace_product(product_id, payload.model_dump())
+    except ProductNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Product not found") from exc
+
+
+@router.patch("/{product_id}", response_model=ProductResponse)
+async def patch_product(product_id: str, payload: ProductPatch):
+    service = get_product_service()
+    try:
+        return await service.patch_product(product_id, payload.model_dump(exclude_unset=True))
     except ProductNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Product not found") from exc

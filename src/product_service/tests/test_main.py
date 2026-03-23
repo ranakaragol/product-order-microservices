@@ -38,6 +38,14 @@ class FakeProductsCollection:
         self._docs[inserted_id] = {"_id": inserted_id, **payload}
         return FakeResult(inserted_id=inserted_id)
 
+    async def update_one(self, query, update):
+        object_id = query.get("_id")
+        if object_id not in self._docs:
+            return FakeResult(matched_count=0)
+
+        self._docs[object_id].update(update.get("$set", {}))
+        return FakeResult(matched_count=1)
+
 
 @pytest.fixture
 def fake_collection():
@@ -93,5 +101,53 @@ async def test_get_product_by_id_returns_404_when_missing(fake_collection):
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.get(f"/products/{missing_id}")
+
+    assert response.status_code == 404
+
+
+async def test_put_and_patch_product_return_200(fake_collection):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        create_response = await ac.post(
+            "/products",
+            json={
+                "name": "Mouse",
+                "description": "Wireless",
+                "price": 25.0,
+                "stock": 50,
+            },
+        )
+        product_id = create_response.json()["id"]
+
+        put_response = await ac.put(
+            f"/products/{product_id}",
+            json={
+                "name": "Mouse Pro",
+                "description": "Wireless Pro",
+                "price": 35.0,
+                "stock": 30,
+            },
+        )
+        patch_response = await ac.patch(f"/products/{product_id}", json={"stock": 20})
+
+    assert put_response.status_code == 200
+    assert put_response.json()["name"] == "Mouse Pro"
+    assert patch_response.status_code == 200
+    assert patch_response.json()["stock"] == 20
+
+
+@pytest.mark.parametrize(
+    "method,path,payload",
+    [
+        (
+            "put",
+            "/products/66f2aa4f8ad9ad0d98da1111",
+            {"name": "X", "description": None, "price": 1.0, "stock": 1},
+        ),
+        ("patch", "/products/66f2aa4f8ad9ad0d98da1111", {"stock": 1}),
+    ],
+)
+async def test_put_patch_return_404_when_missing(fake_collection, method, path, payload):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await getattr(ac, method)(path, json=payload)
 
     assert response.status_code == 404
