@@ -2,6 +2,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from app.main import app
+from app.routers import auth as auth_router
 
 
 class FakeUsersCollection:
@@ -19,7 +20,7 @@ class FakeUsersCollection:
 @pytest_asyncio.fixture(loop_scope="function", autouse=True)
 async def setup_db(monkeypatch):
     fake_db=FakeUsersCollection()
-    monkeypatch.setattr("app.main.users_collection", fake_db)
+    monkeypatch.setattr(auth_router, "users_collection", fake_db)
     yield
 
 @pytest.mark.asyncio(loop_scope="function")
