@@ -1,9 +1,9 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 
 from app.core.database import products_collection as db_products_collection
 from app.repositories.product_repository import ProductRepository
 from app.schemas.product import ProductCreate, ProductResponse
-from app.services.product_service import ProductService
+from app.services.product_service import ProductNotFoundError, ProductService
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -26,3 +26,12 @@ async def list_products():
 async def create_product(payload: ProductCreate):
     service = get_product_service()
     return await service.create_product(payload.model_dump())
+
+
+@router.get("/{product_id}", response_model=ProductResponse)
+async def get_product(product_id: str):
+    service = get_product_service()
+    try:
+        return await service.get_product(product_id)
+    except ProductNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Product not found") from exc

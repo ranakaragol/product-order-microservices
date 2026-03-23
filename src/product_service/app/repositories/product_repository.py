@@ -19,7 +19,14 @@ class ProductRepository:
         return [Product.from_document(doc) for doc in documents]
 
     async def get_by_id(self, product_id: str) -> Optional[Product]:
-        raise NotImplementedError()
+        if not ObjectId.is_valid(product_id):
+            return None
+
+        document = await self._collection.find_one({"_id": ObjectId(product_id)})
+        if not document:
+            return None
+
+        return Product.from_document(document)
 
     async def create(self, data: dict) -> Product:
         payload = {

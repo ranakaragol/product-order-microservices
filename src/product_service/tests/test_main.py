@@ -69,3 +69,29 @@ async def test_post_products_returns_201_and_created_product(fake_collection):
     body = response.json()
     assert body["id"]
     assert body["name"] == "Keyboard"
+
+
+async def test_get_product_by_id_returns_200(fake_collection):
+    payload = {
+        "name": "Monitor",
+        "description": "4K",
+        "price": 300.0,
+        "stock": 7,
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        create_response = await ac.post("/products", json=payload)
+        product_id = create_response.json()["id"]
+        get_response = await ac.get(f"/products/{product_id}")
+
+    assert get_response.status_code == 200
+    assert get_response.json()["name"] == "Monitor"
+
+
+async def test_get_product_by_id_returns_404_when_missing(fake_collection):
+    missing_id = "66f2aa4f8ad9ad0d98da1111"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get(f"/products/{missing_id}")
+
+    assert response.status_code == 404
