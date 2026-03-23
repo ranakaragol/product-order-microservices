@@ -18,8 +18,9 @@ class FakeUsersCollection:
 
 @pytest_asyncio.fixture(loop_scope="function", autouse=True)
 async def setup_db():
-    from app import main
-    main.users_collection = FakeUsersCollection()
+    from app.core import database
+    fake_db=FakeUsersCollection()
+    monkeypatch.setattr(database, "users_collection", fake_db)
     yield
 
 @pytest.mark.asyncio(loop_scope="function")
