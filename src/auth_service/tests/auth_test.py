@@ -17,10 +17,9 @@ class FakeUsersCollection:
         return {"inserted_id": document["username"]}
 
 @pytest_asyncio.fixture(loop_scope="function", autouse=True)
-async def setup_db():
-    from app.core import database
+async def setup_db(monkeypatch):
     fake_db=FakeUsersCollection()
-    monkeypatch.setattr(database, "users_collection", fake_db)
+    monkeypatch.setattr("app.main.users_collection", fake_db)
     yield
 
 @pytest.mark.asyncio(loop_scope="function")
