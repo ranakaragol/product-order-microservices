@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from app.core.database import orders_collection as db_collection
 from app.repositories.order_repository import OrderRepository
-from app.services.order_service import OrderService, OrderNotFoundError, InsufficientStockError
+from app.services.order_service import OrderService, OrderNotFoundError, InsufficientStockError, UnauthenticatedError
 from app.schemas.order import OrderCreate, OrderResponse
-
 
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -19,9 +18,15 @@ async def list_orders(service: OrderService = Depends(get_order_service)):
     return await service.list_orders()
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
-async def create_order(payload: OrderCreate, service: OrderService = Depends(get_order_service)):
+async def create_order(
+    payload: OrderCreate, 
+    authorization: str = Header(None), 
+    service: OrderService = Depends(get_order_service)
+    ):
     try:
-        return await service.create_order(payload.model_dump())
+        return await service.create_order(payload.model_dump(), token=authorization)
+    except UnauthenticatedError:
+        raise HTTPException(status_code=401, detail="Invalid or missing token")
     except InsufficientStockError:
         raise HTTPException(status_code=400, detail="Insufficient stock or product not found")
     

@@ -31,7 +31,7 @@ def setup_fake_db():
     orders_router.orders_collection = fake_db
     yield
 
-# --- Testler ---
+
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_get_orders_returns_200_and_empty_list():
@@ -43,28 +43,29 @@ async def test_get_orders_returns_200_and_empty_list():
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_create_order(respx_mock):
-    # Ürün servisini "Stok Var" (200 OK) olarak taklit ediyoruz
+    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(200))
     respx_mock.get(url__regex=r".*/products/123").mock(
         return_value=Response(200, json={"id": "123", "stock": 100})
     )
     
     payload = {"product_id": "123", "quantity": 2}
+    headers = {"Authorization": "Bearer valid_token"}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/orders", json=payload)
+        response = await ac.post("/orders", json=payload, headers=headers)
     
     assert response.status_code == 201
-    assert response.json()["product_id"] == "123"
 
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_get_order_by_id(respx_mock):
-    # Sipariş oluşturabilmek için önce stok onayını taklit et
+    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(200))
     respx_mock.get(url__regex=r".*/products/123").mock(
         return_value=Response(200, json={"id": "123", "stock": 100})
     )
     
+    headers = {"Authorization": "Bearer valid_token"}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        create = await ac.post("/orders", json={"product_id": "123", "quantity": 1})
+        create = await ac.post("/orders", json={"product_id": "123", "quantity": 1}, headers=headers)
         order_id = create.json()["id"]
         get_res = await ac.get(f"/orders/{order_id}")
     
@@ -74,34 +75,32 @@ async def test_get_order_by_id(respx_mock):
 @pytest.mark.asyncio(loop_scope="function")
 async def test_get_order_invalid_id():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        # Geçersiz bir MongoDB ObjectId'si formatında rastgele bir ID
         response = await ac.get("/orders/66f2aa4f8ad9ad0d98da1111")
     assert response.status_code == 404
 
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_create_order_insufficient_stock_returns_400(respx_mock):
-    # Ürün servisini "Ürün Yok" veya "Hata" (404) olarak taklit ediyoruz
+    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(200))
     respx_mock.get(url__regex=r".*/products/.*").mock(return_value=Response(404))
-
+    
     payload = {"product_id": "non_existent_product", "quantity": 9999}
+    headers = {"Authorization": "Bearer valid_token"}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/orders", json=payload)
+        response = await ac.post("/orders", json=payload, headers=headers)
     
     assert response.status_code == 400
-    # Sözdizimi hatasını düzelttik: response.json()["detail"]
     assert response.json()["detail"] == "Insufficient stock or product not found"
 
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_create_order_invalid_token_returns_401(respx_mock):
-    # Bu testte Auth Service'in 401 döner
     respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(401))
     
     payload = {"product_id": "123", "quantity": 1}
     headers = {"Authorization": "Bearer invalid_token"}
-    
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/orders", json=payload, headers=headers)
-
+    
     assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or missing token"

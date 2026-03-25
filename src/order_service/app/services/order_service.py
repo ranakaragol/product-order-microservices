@@ -4,8 +4,11 @@ from app.repositories.order_repository import OrderRepository
 from app.models.order import Order
 
 PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://product-service:8000")
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
+
 class OrderNotFoundError(Exception): pass
 class InsufficientStockError(Exception): pass
+class UnauthenticatedError(Exception): pass
 
 class OrderService:
     def __init__(self, repository:OrderRepository):
@@ -14,7 +17,18 @@ class OrderService:
     async def list_orders(self):
         return await self._repository.list_orders()
     
-    async def create_order(self, data:dict)->Order:
+    async def create_order(self, data:dict, token:str=None)->Order:
+        async with httpx.AsyncClient() as client:
+            try:
+                auth_res = await client.get(
+                    f"{AUTH_SERVICE_URL}/auth/verify",
+                    headers={"Authorization": token} if token else {}
+                )
+                if auth_res.status_code != 200:
+                    raise UnauthenticatedError()
+            except httpx.HTTPError:
+                raise UnauthenticatedError()
+            
         async with httpx.AsyncClient() as client:
 
             try:
