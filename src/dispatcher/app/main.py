@@ -107,24 +107,30 @@ async def proxy_auth(path: str, request: Request):
     except Exception:
         return JSONResponse(status_code=503, content={"error": "Service Unavailable"})
     
-@app.api_route("/products", methods=["GET", "POST"])
-async def proxy_products_root(request: Request):
-    status, payload = await forward_request(request, PRODUCT_SERVICE_URL, "")
-    return JSONResponse(status_code=status, content=payload)
 
 @app.api_route("/products/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_products(request: Request, path: str = ""):
     status, payload = await forward_request(request, PRODUCT_SERVICE_URL, path)
     return JSONResponse(status_code=status, content=payload)
 
-@app.api_route("/orders", methods=["GET", "POST"])
-async def proxy_orders_root(request: Request):
-    status, payload = await forward_request(request, ORDER_SERVICE_URL, "")
+
+@app.api_route("/products", methods=["GET", "POST"])
+async def proxy_products_root(request: Request):
+    # Boş string yerine "products" gönderiyoruz
+    status, payload = await forward_request(request, PRODUCT_SERVICE_URL, "products")
     return JSONResponse(status_code=status, content=payload)
+
+
 
 @app.api_route("/orders/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_orders(request: Request, path: str = ""):
     status, payload = await forward_request(request, ORDER_SERVICE_URL, path)
+    return JSONResponse(status_code=status, content=payload)
+
+@app.api_route("/orders", methods=["GET", "POST"])
+async def proxy_orders_root(request: Request):
+    # Boş string yerine "orders" gönderiyoruz
+    status, payload = await forward_request(request, ORDER_SERVICE_URL, "orders")
     return JSONResponse(status_code=status, content=payload)
 
 """@app.api_route("/{path:path}")
