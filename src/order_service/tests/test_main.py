@@ -83,7 +83,7 @@ async def test_get_order_invalid_id():
 async def test_create_order_insufficient_stock_returns_400(respx_mock):
     # Ürün servisini "Ürün Yok" veya "Hata" (404) olarak taklit ediyoruz
     respx_mock.get(url__regex=r".*/products/.*").mock(return_value=Response(404))
-    
+
     payload = {"product_id": "non_existent_product", "quantity": 9999}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/orders", json=payload)
@@ -91,3 +91,17 @@ async def test_create_order_insufficient_stock_returns_400(respx_mock):
     assert response.status_code == 400
     # Sözdizimi hatasını düzelttik: response.json()["detail"]
     assert response.json()["detail"] == "Insufficient stock or product not found"
+
+@pytest.mark.asyncio(loop_scope="function")
+@respx.mock
+async def test_create_order_invalid_token_returns_401(respx_mock):
+    # Bu testte Auth Service'in 401 döner
+    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(401))
+    
+    payload = {"product_id": "123", "quantity": 1}
+    headers = {"Authorization": "Bearer invalid_token"}
+    
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/orders", json=payload, headers=headers)
+
+    assert response.status_code == 401
