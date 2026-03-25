@@ -16,9 +16,8 @@ class OrderRepository:
         return [Order.from_document(doc) for doc in documents]
     
     async def create_order(self, data:dict)->Order:
-        payload={
-            "product_id":data["product_id"],
-            "quantity": data["quantity"],
+        payload = {
+            **data,
             "status": "pending"
         }
         result =await self._collection.insert_one(payload)

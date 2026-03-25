@@ -17,30 +17,37 @@ class OrderService:
     async def list_orders(self):
         return await self._repository.list_orders()
     
-    async def create_order(self, data:dict, token:str=None)->Order:
+    async def _get(self, url: str, headers: dict = None):
         async with httpx.AsyncClient() as client:
-            try:
-                auth_res = await client.get(
-                    f"{AUTH_SERVICE_URL}/verify-token",
-                    headers={"Authorization": token} if token else {}
-                )
-                if auth_res.status_code != 200:
-                    raise UnauthenticatedError()
-            except httpx.HTTPError:
+            return await client.get(url, headers=headers)
+    
+    async def create_order(self, data: dict, token: str = None) -> Order:
+        #auth check
+        try:
+            auth_res = await self._get(
+                f"{AUTH_SERVICE_URL}/verify-token",
+                headers={"Authorization": token} if token else {}
+            )
+            if auth_res.status_code != 200:
                 raise UnauthenticatedError()
+        except httpx.HTTPError:
+            raise UnauthenticatedError()
             
-        async with httpx.AsyncClient() as client:
-
-            try:
-                response= await client.get(f"{PRODUCT_SERVICE_URL}/products/{data['product_id']}")
-                if response.status_code!=200:
-                    raise InsufficientStockError()
-                product=response.json()
-                if product["stock"]<data["quantity"]:
-                    raise InsufficientStockError()
-                
-            except(httpx.HTTPError, KeyError):
+        #product check
+        try:
+            response = await self._get(
+                f"{PRODUCT_SERVICE_URL}/products/{data['product_id']}"
+            )
+            if response.status_code != 200:
                 raise InsufficientStockError()
+
+            product = response.json()
+            if product["stock"] < data["quantity"]:
+                raise InsufficientStockError()
+
+        except (httpx.HTTPError, KeyError):
+            raise InsufficientStockError()
+
 
         return await self._repository.create_order(data)
     
