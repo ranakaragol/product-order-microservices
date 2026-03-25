@@ -35,7 +35,7 @@ async def test_get_order_by_id():
         order_id=create.json()["id"]
         get_res=await ac.get(f"/orders/{order_id}")
 
-    assert get_res.statuc_code==200
+    assert get_res.status_code==200
 
 
 @pytest.mark.asyncio(loop_scope="function")
