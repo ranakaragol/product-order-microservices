@@ -3,8 +3,8 @@ import os
 from app.repositories.order_repository import OrderRepository
 from app.models.order import Order
 
-PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://product-service:8000")
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
+PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://product_service:8000")
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8000")
 
 class OrderNotFoundError(Exception): pass
 class InsufficientStockError(Exception): pass
@@ -21,7 +21,7 @@ class OrderService:
         async with httpx.AsyncClient() as client:
             try:
                 auth_res = await client.get(
-                    f"{AUTH_SERVICE_URL}/auth/verify",
+                    f"{AUTH_SERVICE_URL}/verify-token",
                     headers={"Authorization": token} if token else {}
                 )
                 if auth_res.status_code != 200:
