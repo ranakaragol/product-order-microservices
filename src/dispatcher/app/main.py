@@ -8,7 +8,6 @@ from fastapi import Depends, Request, APIRouter
 from app.core.database import logs_collection
 from app.models.log import TrafficLog
 
-
 app= FastAPI()
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8000")
 PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://product_service:8000")
@@ -20,7 +19,6 @@ SERVICES={
     "products":PRODUCT_SERVICE_URL,
     "orders":ORDER_SERVICE_URL,
 }
-
 
 def _build_auth_upstream_url(path: str) -> str:
     return f"{AUTH_SERVICE_URL.rstrip('/')}/{path.lstrip('/')}"
@@ -38,19 +36,21 @@ def _parse_upstream_payload(upstream_response: httpx.Response):
 
 
 async def forward_request(request:Request, base_url:str, path:str):
-    """Genel mikroservis yönlendirme fonksiyonu"""
-    url=f"{base_url.rstrip('/')}/{path.lstrip('/')}".rstrip("/")
+    # """Genel mikroservis yönlendirme fonksiyonu"""
+    # url = f"{base_url.rstrip('/')}/{request.url.path.lstrip('/')}"
+    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            upstream_response=await client.request(
+            upstream_response = await client.request(
                 method=request.method,
                 url=url,
                 params=request.query_params,
                 content=await request.body(),
-                headers= _filtered_forward_headers(request),
+                headers=_filtered_forward_headers(request),
             )
             return upstream_response.status_code, _parse_upstream_payload(upstream_response)
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: Error in forward -> {e}")
             return 503, {"error": "Service Unavailable"}
         
 async def forward_auth_request(request: Request, path: str):
@@ -122,9 +122,14 @@ async def proxy_products_root(request: Request):
 
 
 
+# @app.api_route("/orders/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+# async def proxy_orders(request: Request, path: str = ""):
+#     status, payload = await forward_request(request, ORDER_SERVICE_URL, path)
+#     return JSONResponse(status_code=status, content=payload)
 @app.api_route("/orders/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_orders(request: Request, path: str = ""):
-    status, payload = await forward_request(request, ORDER_SERVICE_URL, path)
+    full_path = f"orders/{path}"
+    status, payload = await forward_request(request, ORDER_SERVICE_URL, full_path)
     return JSONResponse(status_code=status, content=payload)
 
 @app.api_route("/orders", methods=["GET", "POST"])
@@ -133,6 +138,3 @@ async def proxy_orders_root(request: Request):
     status, payload = await forward_request(request, ORDER_SERVICE_URL, "orders")
     return JSONResponse(status_code=status, content=payload)
 
-"""@app.api_route("/{path:path}")
-async def catch_all():
-    return JSONResponse(status_code=404, content={"error": "Not Found"})"""

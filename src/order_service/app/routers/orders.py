@@ -38,14 +38,15 @@ async def get_order(order_id: str, service: OrderService = Depends(get_order_ser
     except OrderNotFoundError:
         raise HTTPException(status_code=404, detail="Order not found!")
     
-
-# async def reduce_stock(product_id: str, data: dict):
-#     quantity = data.get("quantity", 1)
-#     # MongoDB atomik güncelleme (Stoğu kontrol et ve düş)
-#     result = await products_collection.update_one(
-#         {"_id": ObjectId(product_id), "stock": {"$gte": quantity}},
-#         {"$inc": {"stock": -quantity}}
-#     )
-#     if result.modified_count == 0:
-#         raise HTTPException(status_code=400, detail="Stok yetersiz")
-#     return {"message": "Stok düşürüldü"}
+@router.post("/{order_id}/cancel", response_model=OrderResponse)
+async def cancel_order(
+    order_id: str,
+    authorization: str = Header(None),
+    service: OrderService = Depends(get_order_service)
+):
+    try:
+        return await service.cancel_order(order_id, token=authorization)
+    except OrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Order not found")
+    except InsufficientStockError:
+        raise HTTPException(status_code=400, detail="Stock update failed")

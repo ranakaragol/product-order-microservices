@@ -38,15 +38,13 @@ async def create_product(payload: ProductCreate, service: ServiceDep):
 async def reduce_stock(product_id: str, data: dict):
     quantity = data.get("quantity")
 
-    # ❗ validation
     if quantity is None or quantity <= 0:
         raise HTTPException(status_code=400, detail="Geçersiz miktar")
 
-    # ❗ ObjectId kontrolü
+    # ObjectId kontrolü
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=400, detail="Geçersiz ürün ID")
-
-    # 🔥 atomik stok düşme işlemi
+    
     result = await products_collection.update_one(
         {
             "_id": ObjectId(product_id),
@@ -56,8 +54,7 @@ async def reduce_stock(product_id: str, data: dict):
             "$inc": {"stock": -quantity}  # stok düş
         }
     )
-
-    # ❗ ürün yok ya da stok yetmedi
+    # ürün yok ya da stok yetmedi
     if result.modified_count == 0:
         raise HTTPException(
             status_code=400,
@@ -65,6 +62,20 @@ async def reduce_stock(product_id: str, data: dict):
         )
 
     return {"message": "Stok başarıyla düşürüldü"}
+
+@router.post("/{product_id}/increase-stock")
+async def increase_stock(product_id: str, data: dict):
+    quantity = data.get("quantity", 1)
+
+    result = await products_collection.update_one(
+        {"_id": ObjectId(product_id)},
+        {"$inc": {"stock": quantity}}
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+
+    return {"message": "Stok artırıldı"}
 
 @router.get("/{product_id}", response_model=ProductResponse)
 async def get_product(product_id: str, service: ServiceDep):

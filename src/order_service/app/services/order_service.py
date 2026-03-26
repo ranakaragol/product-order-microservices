@@ -2,6 +2,7 @@ import httpx
 import os
 from app.repositories.order_repository import OrderRepository
 from app.models.order import Order
+from bson import ObjectId
 
 PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://product_service:8000")
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8000")
@@ -22,6 +23,7 @@ class OrderService:
         async with httpx.AsyncClient() as client:
             return await client.get(url, headers=headers)
     
+    #sipariş oluştur
     async def create_order(self, data: dict, token: str = None) -> Order:
         async with httpx.AsyncClient() as client:
             #auth check
@@ -59,7 +61,38 @@ class OrderService:
                 raise InsufficientStockError()
 
             return await self._repository.create_order(data)
-    
+        
+    #sipariş iptal
+    async def cancel_order(self, order_id: str, token: str = None):
+        order = await self._repository.get_by_id(order_id)
+
+        if not order:
+            raise OrderNotFoundError()
+
+        if order.status == "cancelled":
+            return order
+
+        async with httpx.AsyncClient() as client:
+            try:
+                res = await client.post(
+                    f"{PRODUCT_SERVICE_URL}/products/{order.product_id}/increase-stock",
+                    json={"quantity": order.quantity}
+                )
+
+                if res.status_code != 200:
+                    raise InsufficientStockError()
+
+            except httpx.HTTPError:
+                raise InsufficientStockError()
+
+        # status güncelle
+        await self._repository._collection.update_one(
+            {"_id": ObjectId(order_id)},
+            {"$set": {"status": "cancelled"}}
+        )
+
+        return await self._repository.get_by_id(order_id)
+
     async def get_order(self, order_id:str):
         order=await self._repository.get_by_id(order_id)
         if not order:
