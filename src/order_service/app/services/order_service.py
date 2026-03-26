@@ -32,6 +32,14 @@ class OrderService:
                 )
                 if auth_res.status_code != 200:
                     raise UnauthenticatedError()
+                
+                user_info = auth_res.json()
+                print(f"DEBUG: User Info from Auth: {user_info}")
+                data["user_id"] = (
+                    user_info.get("user") or 
+                    "unknown_user"
+                )
+
             except httpx.HTTPError:
                 raise UnauthenticatedError()
                 
