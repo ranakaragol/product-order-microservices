@@ -1,7 +1,6 @@
 from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, status
-
+from bson import ObjectId
 from app.core.database import products_collection as db_products_collection
 from app.repositories.product_repository import ProductRepository
 from app.schemas.product import ProductCreate, ProductPatch, ProductResponse, ProductUpdate
@@ -34,6 +33,38 @@ async def list_products(service: ServiceDep):
 async def create_product(payload: ProductCreate, service: ServiceDep):
     return await service.create_product(payload.model_dump())
 
+
+@router.post("/{product_id}/reduce-stock")
+async def reduce_stock(product_id: str, data: dict):
+    quantity = data.get("quantity")
+
+    # ❗ validation
+    if quantity is None or quantity <= 0:
+        raise HTTPException(status_code=400, detail="Geçersiz miktar")
+
+    # ❗ ObjectId kontrolü
+    if not ObjectId.is_valid(product_id):
+        raise HTTPException(status_code=400, detail="Geçersiz ürün ID")
+
+    # 🔥 atomik stok düşme işlemi
+    result = await products_collection.update_one(
+        {
+            "_id": ObjectId(product_id),
+            "stock": {"$gte": quantity}  # stok yeterli mi
+        },
+        {
+            "$inc": {"stock": -quantity}  # stok düş
+        }
+    )
+
+    # ❗ ürün yok ya da stok yetmedi
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Stok yetersiz veya ürün bulunamadı"
+        )
+
+    return {"message": "Stok başarıyla düşürüldü"}
 
 @router.get("/{product_id}", response_model=ProductResponse)
 async def get_product(product_id: str, service: ServiceDep):

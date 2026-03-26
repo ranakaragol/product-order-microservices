@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from app.core.database import orders_collection as db_collection
 from app.repositories.order_repository import OrderRepository
@@ -36,3 +37,15 @@ async def get_order(order_id: str, service: OrderService = Depends(get_order_ser
         return await service.get_order(order_id)
     except OrderNotFoundError:
         raise HTTPException(status_code=404, detail="Order not found!")
+    
+
+# async def reduce_stock(product_id: str, data: dict):
+#     quantity = data.get("quantity", 1)
+#     # MongoDB atomik güncelleme (Stoğu kontrol et ve düş)
+#     result = await products_collection.update_one(
+#         {"_id": ObjectId(product_id), "stock": {"$gte": quantity}},
+#         {"$inc": {"stock": -quantity}}
+#     )
+#     if result.modified_count == 0:
+#         raise HTTPException(status_code=400, detail="Stok yetersiz")
+#     return {"message": "Stok düşürüldü"}
