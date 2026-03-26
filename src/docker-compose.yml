@@ -48,10 +48,15 @@ services:
     container_name: order_service
     environment:
       - MONGO_URL=${ORDER_MONGO_URL:-mongodb://order_mongo:27017/order_db}
+      - AUTH_SERVICE_URL=http://auth_service:8000
+      - PRODUCT_SERVICE_URL=http://product_service:8000
+      - PYTHONPATH=/app
     networks:
       - internal_network
     depends_on:
       - order_mongo
+      - auth_service
+      - product_service
 
   # 4. API GATEWAY - DISPATCHER
   dispatcher_mongo:
@@ -82,8 +87,10 @@ services:
       context: ./auth_service
       target: test
     environment:
-      - MONGO_URL=${AUTH_MONGO_URL:-mongodb://auth_mongo:27017/auth_db}
-      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+      - MONGO_URL=${ORDER_MONGO_URL:-mongodb://order_mongo:27017/order_db}
+      - AUTH_SERVICE_URL=http://auth_service:8000
+      - PRODUCT_SERVICE_URL=http://product_service:8000
+      - PYTHONPATH=/app
     networks:
       - internal_network
     depends_on:
@@ -139,15 +146,16 @@ services:
       target: test
     environment:
       - MONGO_URL=${ORDER_MONGO_URL:-mongodb://order_mongo:27017/order_db}
+      - PYTHONPATH=/app
     networks:
       - internal_network
     depends_on:
       - order_mongo
-    volumes:
-      - ./order_service:/workspace
+    # volumes:
+    #   - ./order_service:/workspace
     profiles:
       - test
-    command: ["sh", "-lc", "PYTHONPATH=/workspace pytest /workspace/tests"]
+    command: ["pytest", "/app/tests"]
 
 networks:
   internal_network:

@@ -43,9 +43,9 @@ async def test_get_orders_returns_200_and_empty_list():
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_create_order(respx_mock):
-    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(200))
-    respx_mock.get(url__regex=r".*/products/123").mock(
-        return_value=Response(200, json={"id": "123", "stock": 100})
+    respx_mock.get(url__regex=r".*/verify-token").mock(return_value=Response(200, json={"user": "test_user", "valid": True}))
+    respx_mock.post(url__regex=r".*/products/.*/reduce-stock").mock(
+        return_value=Response(200)
     )
     
     payload = {"product_id": "123", "quantity": 2}
@@ -58,9 +58,11 @@ async def test_create_order(respx_mock):
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_get_order_by_id(respx_mock):
-    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(200))
-    respx_mock.get(url__regex=r".*/products/123").mock(
-        return_value=Response(200, json={"id": "123", "stock": 100})
+    respx_mock.get(url__regex=r".*/verify-token").mock(
+        return_value=Response(200, json={"user": "test_user", "valid": True})
+    )
+    respx_mock.post(url__regex=r".*/products/.*/reduce-stock").mock(
+        return_value=Response(200)
     )
     
     headers = {"Authorization": "Bearer valid_token"}
@@ -81,8 +83,8 @@ async def test_get_order_invalid_id():
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_create_order_insufficient_stock_returns_400(respx_mock):
-    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(200))
-    respx_mock.get(url__regex=r".*/products/.*").mock(return_value=Response(404))
+    respx_mock.get(url__regex=r".*/verify-token").mock(return_value=Response(200, json={"user": "test_user", "valid": True}))
+    respx_mock.post(url__regex=r".*/products/.*/reduce-stock").mock(return_value=Response(400))
     
     payload = {"product_id": "non_existent_product", "quantity": 9999}
     headers = {"Authorization": "Bearer valid_token"}
@@ -95,7 +97,7 @@ async def test_create_order_insufficient_stock_returns_400(respx_mock):
 @pytest.mark.asyncio(loop_scope="function")
 @respx.mock
 async def test_create_order_invalid_token_returns_401(respx_mock):
-    respx_mock.get(url__regex=r".*/auth/verify").mock(return_value=Response(401))
+    respx_mock.get(url__regex=r".*/verify-token").mock(return_value=Response(401))
     
     payload = {"product_id": "123", "quantity": 1}
     headers = {"Authorization": "Bearer invalid_token"}
