@@ -99,3 +99,21 @@ class OrderService:
             raise OrderNotFoundError()
         return order
     
+    async def get_my_orders(self, token: str) -> list[Order]:
+        async with httpx.AsyncClient() as client:
+            # token auth service ile doğrula
+            auth_res = await client.get(
+                f"{AUTH_SERVICE_URL}/verify-token",
+                headers={"Authorization": token}
+            )
+            
+            if auth_res.status_code != 200:
+                raise UnauthenticatedError() 
+            
+            user_info = auth_res.json()
+            user_id = user_info.get("user") or user_info.get("sub")
+            
+        # sadece o kullanıcıya ait veriler gelir
+        orders_data = await self._repository.get_orders_by_user(user_id)
+        return [Order(**order) for order in orders_data]
+    

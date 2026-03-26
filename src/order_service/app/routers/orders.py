@@ -31,12 +31,16 @@ async def create_order(
     except InsufficientStockError:
         raise HTTPException(status_code=400, detail="Insufficient stock or product not found")
     
-@router.get("/{order_id}", response_model=OrderResponse)
-async def get_order(order_id: str, service: OrderService = Depends(get_order_service)):
-    try:
-        return await service.get_order(order_id)
-    except OrderNotFoundError:
-        raise HTTPException(status_code=404, detail="Order not found!")
+    
+@router.get("/", response_model=list[OrderResponse])
+async def get_orders(
+    authorization: str = Header(None),
+    service: OrderService = Depends(get_order_service)
+    ):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Yetkilendirme başlığı eksik!")
+   
+    return await service.get_my_orders(authorization)
     
 @router.post("/{order_id}/cancel", response_model=OrderResponse)
 async def cancel_order(

@@ -87,7 +87,7 @@ async def test_products_route_is_forwarded(monkeypatch):
     async def fake_forward(request, base_url, path):
         # Dispatcher doğru servise yönlendiriyor mu?
         assert base_url.endswith("product_service:8000")
-        assert path == ""
+        assert path == "products"
         return 200, {"message": "product ok"}
 
     monkeypatch.setattr("app.main.forward_request", fake_forward)
@@ -103,7 +103,7 @@ async def test_products_route_is_forwarded(monkeypatch):
 async def test_orders_route_is_forwarded(monkeypatch):
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("order_service:8000")
-        assert path == ""
+        assert path == "orders"
         return 200, {"message": "order ok"}
 
     monkeypatch.setattr("app.main.forward_request", fake_forward)

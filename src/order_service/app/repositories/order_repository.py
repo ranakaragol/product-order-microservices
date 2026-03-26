@@ -30,3 +30,8 @@ class OrderRepository:
         doc= await self._collection.find_one({"_id": ObjectId(order_id)})
         return Order.from_document(doc) if doc else None
     
+    async def get_orders_by_user(self, user_id: str) -> list[dict]:
+        cursor = self._collection.find({"user_id": user_id})
+        orders = await cursor.to_list(length=100)
+        return orders
+    
