@@ -44,7 +44,7 @@ async def test_invalid_token_returns_401(path):
     "method,path",
     [
         ("put", "/products"),
-        ("delete", "/orders"),
+        ("put", "/orders"),
     ],
 )
 async def test_valid_token_but_forbidden_method_returns_403(method, path):
