@@ -1,10 +1,11 @@
+import asyncio
 import os
 
 import httpx
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from app.core.security import evaluate_authorization
-from fastapi import Depends, Request, APIRouter
+from fastapi import Request
 from app.core.database import logs_collection
 from app.models.log import TrafficLog
 
@@ -19,6 +20,7 @@ SERVICES={
     "products":PRODUCT_SERVICE_URL,
     "orders":ORDER_SERVICE_URL,
 }
+LOG_INSERT_TIMEOUT_SECONDS = float(os.getenv("DISPATCHER_LOG_INSERT_TIMEOUT_SECONDS", "0.2"))
 
 
 def _service_unavailable_response() -> JSONResponse:
@@ -93,7 +95,10 @@ async def check_auth(request: Request, call_next):
             status_code=response.status_code,
             client_ip= request.client.host if request.client else "unknown"
         )
-        await logs_collection.insert_one(log_entry.model_dump())
+        await asyncio.wait_for(
+            logs_collection.insert_one(log_entry.model_dump()),
+            timeout=LOG_INSERT_TIMEOUT_SECONDS,
+        )
     except Exception as e:
         print(f"Logging error: {e}")
 
