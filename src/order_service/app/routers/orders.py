@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.database import orders_collection as db_collection
 from app.repositories.order_repository import OrderRepository
@@ -13,34 +15,41 @@ def get_order_service() -> OrderService:
     repository = OrderRepository(collection_provider=lambda: orders_collection)
     return OrderService(repository=repository)
 
+
+ServiceDep = Annotated[OrderService, Depends(get_order_service)]
+
+
+def _not_found_error() -> HTTPException:
+    return HTTPException(status_code=404, detail="Order not found")
+
 @router.get("", response_model=list[OrderResponse])
-async def list_orders(service: OrderService = Depends(get_order_service)):
+async def list_orders(service: ServiceDep):
     return await service.list_orders()
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
-async def create_order(payload: OrderCreate, service: OrderService = Depends(get_order_service)):
+async def create_order(payload: OrderCreate, service: ServiceDep):
     return await service.create_order(payload.model_dump())
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
-async def get_order(order_id: str, service: OrderService = Depends(get_order_service)):
+async def get_order(order_id: str, service: ServiceDep):
     try:
         return await service.get_order(order_id)
     except OrderNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Order not found") from exc
+        raise _not_found_error() from exc
 
 
 @router.patch("/{order_id}", response_model=OrderResponse)
-async def patch_order(order_id: str, payload: OrderPatch, service: OrderService = Depends(get_order_service)):
+async def patch_order(order_id: str, payload: OrderPatch, service: ServiceDep):
     try:
         return await service.patch_order(order_id, payload.model_dump(exclude_unset=True))
     except OrderNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Order not found") from exc
+        raise _not_found_error() from exc
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_order(order_id: str, service: OrderService = Depends(get_order_service)):
+async def delete_order(order_id: str, service: ServiceDep):
     try:
         await service.delete_order(order_id)
     except OrderNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Order not found") from exc
+        raise _not_found_error() from exc
