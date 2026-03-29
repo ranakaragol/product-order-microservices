@@ -8,7 +8,7 @@ ALGORITHM="HS256"
 PROTECTED_PREFIXES = ("/products", "/orders")
 ALLOWED_METHODS = {
     "/products": {"GET", "POST"},
-    "/orders": {"GET", "POST"},
+    "/orders": {"GET", "POST", "PATCH", "DELETE"},
     "/auth":{"POST"},
 }
 
