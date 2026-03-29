@@ -17,8 +17,10 @@ class OrderRepository:
     
     async def create_order(self, data:dict)->Order:
         payload = {
-            **data,
-            "status": "pending"
+            "customer_id": data["customer_id"],
+            "items": data["items"],
+            "status": data.get("status", "pending"),
+            "total_amount": float(data["total_amount"]),
         }
         result =await self._collection.insert_one(payload)
         created=await self._collection.find_one({"_id": result.inserted_id})
@@ -30,8 +32,26 @@ class OrderRepository:
         doc= await self._collection.find_one({"_id": ObjectId(order_id)})
         return Order.from_document(doc) if doc else None
     
-    async def get_orders_by_user(self, user_id: str) -> list[dict]:
-        cursor = self._collection.find({"user_id": user_id})
-        orders = await cursor.to_list(length=100)
-        return orders
+    async def patch_order(self, order_id: str, data: dict) -> Optional[Order]:
+        if not ObjectId.is_valid(order_id):
+            return None
+
+        object_id = ObjectId(order_id)
+        patch_doc = {key: value for key, value in data.items() if value is not None}
+        if not patch_doc:
+            return await self.get_by_id(order_id)
+
+        result = await self._collection.update_one({"_id": object_id}, {"$set": patch_doc})
+        if result.matched_count == 0:
+            return None
+
+        updated = await self._collection.find_one({"_id": object_id})
+        return Order.from_document(updated)
+
+    async def delete_order(self, order_id: str) -> bool:
+        if not ObjectId.is_valid(order_id):
+            return False
+
+        result = await self._collection.delete_one({"_id": ObjectId(order_id)})
+        return result.deleted_count > 0
     
