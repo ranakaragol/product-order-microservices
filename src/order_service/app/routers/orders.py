@@ -1,9 +1,10 @@
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.database import orders_collection as db_collection
 from app.repositories.order_repository import OrderRepository
-from app.services.order_service import OrderService, OrderNotFoundError, InsufficientStockError, UnauthenticatedError
-from app.schemas.order import OrderCreate, OrderResponse
+from app.schemas.order import OrderCreate, OrderPatch, OrderResponse
+from app.services.order_service import OrderNotFoundError, OrderService
 
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -14,43 +15,41 @@ def get_order_service() -> OrderService:
     repository = OrderRepository(collection_provider=lambda: orders_collection)
     return OrderService(repository=repository)
 
+
+ServiceDep = Annotated[OrderService, Depends(get_order_service)]
+
+
+def _not_found_error() -> HTTPException:
+    return HTTPException(status_code=404, detail="Order not found")
+
 @router.get("", response_model=list[OrderResponse])
-async def list_orders(service: OrderService = Depends(get_order_service)):
+async def list_orders(service: ServiceDep):
     return await service.list_orders()
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
-async def create_order(
-    payload: OrderCreate, 
-    authorization: str = Header(None), 
-    service: OrderService = Depends(get_order_service)
-    ):
+async def create_order(payload: OrderCreate, service: ServiceDep):
+    return await service.create_order(payload.model_dump())
+
+
+@router.get("/{order_id}", response_model=OrderResponse)
+async def get_order(order_id: str, service: ServiceDep):
     try:
-        return await service.create_order(payload.model_dump(), token=authorization)
-    except UnauthenticatedError:
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
-    except InsufficientStockError:
-        raise HTTPException(status_code=400, detail="Insufficient stock or product not found")
-    
-    
-@router.get("/", response_model=list[OrderResponse])
-async def get_orders(
-    authorization: str = Header(None),
-    service: OrderService = Depends(get_order_service)
-    ):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Yetkilendirme başlığı eksik!")
-   
-    return await service.get_my_orders(authorization)
-    
-@router.post("/{order_id}/cancel", response_model=OrderResponse)
-async def cancel_order(
-    order_id: str,
-    authorization: str = Header(None),
-    service: OrderService = Depends(get_order_service)
-):
+        return await service.get_order(order_id)
+    except OrderNotFoundError as exc:
+        raise _not_found_error() from exc
+
+
+@router.patch("/{order_id}", response_model=OrderResponse)
+async def patch_order(order_id: str, payload: OrderPatch, service: ServiceDep):
     try:
-        return await service.cancel_order(order_id, token=authorization)
-    except OrderNotFoundError:
-        raise HTTPException(status_code=404, detail="Order not found")
-    except InsufficientStockError:
-        raise HTTPException(status_code=400, detail="Stock update failed")
+        return await service.patch_order(order_id, payload.model_dump(exclude_unset=True))
+    except OrderNotFoundError as exc:
+        raise _not_found_error() from exc
+
+
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_order(order_id: str, service: ServiceDep):
+    try:
+        await service.delete_order(order_id)
+    except OrderNotFoundError as exc:
+        raise _not_found_error() from exc
