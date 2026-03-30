@@ -1,6 +1,5 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from bson import ObjectId
 from app.core.database import products_collection as db_products_collection
 from app.repositories.product_repository import ProductRepository
 from app.schemas.product import ProductCreate, ProductPatch, ProductResponse, ProductUpdate
@@ -32,6 +31,7 @@ async def list_products(service: ServiceDep):
 @router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 async def create_product(payload: ProductCreate, service: ServiceDep):
     return await service.create_product(payload.model_dump())
+
 
 @router.get("/{product_id}", response_model=ProductResponse)
 async def get_product(product_id: str, service: ServiceDep):
