@@ -76,6 +76,11 @@ async def _write_traffic_log(request: Request, status_code: int):
         print(f"Logging error: {e}")
 
 
+async def _build_logged_error_response(request: Request, status_code: int, message: str) -> JSONResponse:
+    await _write_traffic_log(request, status_code)
+    return JSONResponse(status_code=status_code, content={"error": message})
+
+
 async def forward_request(request:Request, base_url:str, path:str):
     # """Genel mikroservis yönlendirme fonksiyonu"""
     # url = f"{base_url.rstrip('/')}/{request.url.path.lstrip('/')}"
@@ -122,11 +127,9 @@ async def check_auth(request: Request, call_next):
     
     status_code = await evaluate_authorization(request)
     if status_code == 401:
-        await _write_traffic_log(request, 401)
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        return await _build_logged_error_response(request, 401, "Unauthorized")
     if status_code == 403:
-        await _write_traffic_log(request, 403)
-        return JSONResponse(status_code=403, content={"error": "Forbidden"})
+        return await _build_logged_error_response(request, 403, "Forbidden")
     response= await call_next(request)
     await _write_traffic_log(request, response.status_code)
     return response

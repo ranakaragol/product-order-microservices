@@ -466,6 +466,19 @@ async def test_missing_token_denied_request_is_logged(monkeypatch):
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_invalid_token_denied_request_is_logged(monkeypatch):
+    fake_logs = _install_log_capture(monkeypatch)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/products", headers={"Authorization": "Bearer invalid-token"})
+
+    assert response.status_code == 401
+    assert len(fake_logs.entries) == 1
+    assert fake_logs.entries[0]["path"] == "/products"
+    assert fake_logs.entries[0]["status_code"] == 401
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_forbidden_request_is_logged(monkeypatch):
     _install_access_profiles(monkeypatch, profiles_by_subject={})
     fake_logs = _install_log_capture(monkeypatch)
@@ -507,7 +520,7 @@ async def test_allowed_request_is_logged(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_upstream_unavailable_request_is_logged(monkeypatch):
-    _install_log_capture(monkeypatch)
+    fake_logs = _install_log_capture(monkeypatch)
 
     async def fake_forward(request, base_url, path):
         raise httpx.ConnectError("upstream down")
@@ -518,3 +531,6 @@ async def test_upstream_unavailable_request_is_logged(monkeypatch):
         response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
 
     assert response.status_code == 503
+    assert len(fake_logs.entries) == 1
+    assert fake_logs.entries[0]["path"] == "/products"
+    assert fake_logs.entries[0]["status_code"] == 503
