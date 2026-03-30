@@ -75,7 +75,7 @@ services:
       - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://order_service:8000}
       - MONGO_URL=${DISPATCHER_MONGO_URL:-mongodb://dispatcher_mongo:27017/dispatcher_db}
       - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
-      - 'DISPATCHER_ACCESS_PROFILES_BOOTSTRAP={"default-authenticated":{"subject":"default-authenticated","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]}}'
+      - 'DISPATCHER_ACCESS_PROFILES_BOOTSTRAP={"default-authenticated":{"subject":"default-authenticated","permissions":[{"resource":"/products","methods":["GET"]},{"resource":"/orders","methods":["GET"]}]},"dispatcher-user":{"subject":"dispatcher-user","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]},"alice":{"subject":"alice","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]},"bob":{"subject":"bob","permissions":[{"resource":"/products","methods":["GET"]},{"resource":"/orders","methods":["GET"]}]}}'
     networks:
       - internal_network
     depends_on:
@@ -113,7 +113,7 @@ services:
       - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://order_service:8000}
       - MONGO_URL=${DISPATCHER_MONGO_URL:-mongodb://dispatcher_mongo:27017/dispatcher_db}
       - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
-      - 'DISPATCHER_ACCESS_PROFILES_BOOTSTRAP={"default-authenticated":{"subject":"default-authenticated","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]}}'
+      - 'DISPATCHER_ACCESS_PROFILES_BOOTSTRAP={"default-authenticated":{"subject":"default-authenticated","permissions":[{"resource":"/products","methods":["GET"]},{"resource":"/orders","methods":["GET"]}]},"dispatcher-user":{"subject":"dispatcher-user","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]},"alice":{"subject":"alice","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]},"bob":{"subject":"bob","permissions":[{"resource":"/products","methods":["GET"]},{"resource":"/orders","methods":["GET"]}]}}'
       - PYTHONPATH=/workspace
     networks:
       - internal_network
