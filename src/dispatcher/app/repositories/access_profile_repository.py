@@ -4,16 +4,25 @@ import os
 from app.core.database import access_profiles_collection
 
 BOOTSTRAP_PROFILES_ENV = "DISPATCHER_ACCESS_PROFILES_BOOTSTRAP"
+DEFAULT_AUTHENTICATED_SUBJECT = "default-authenticated"
+
+
+def _default_permissions() -> list[dict]:
+    return [
+        {"resource": "/products", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+        {"resource": "/orders", "methods": ["GET", "POST", "PATCH", "DELETE"]},
+    ]
 
 
 def _default_bootstrap_profiles() -> dict[str, dict]:
     return {
+        DEFAULT_AUTHENTICATED_SUBJECT: {
+            "subject": DEFAULT_AUTHENTICATED_SUBJECT,
+            "permissions": _default_permissions(),
+        },
         "dispatcher-user": {
             "subject": "dispatcher-user",
-            "permissions": [
-                {"resource": "/products", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
-                {"resource": "/orders", "methods": ["GET", "POST", "PATCH", "DELETE"]},
-            ],
+            "permissions": _default_permissions(),
         }
     }
 
@@ -73,7 +82,16 @@ class AccessProfileRepository:
         if persisted_profile:
             return persisted_profile
 
-        return self._bootstrap_profiles.get(subject)
+        bootstrap_profile = self._bootstrap_profiles.get(subject)
+        if bootstrap_profile:
+            return bootstrap_profile
+
+        if subject != DEFAULT_AUTHENTICATED_SUBJECT:
+            default_persisted_profile = await self._get_persisted_profile(DEFAULT_AUTHENTICATED_SUBJECT)
+            if default_persisted_profile:
+                return default_persisted_profile
+
+        return self._bootstrap_profiles.get(DEFAULT_AUTHENTICATED_SUBJECT)
 
     async def _get_persisted_profile(self, subject: str) -> dict | None:
         if self._collection is None:
