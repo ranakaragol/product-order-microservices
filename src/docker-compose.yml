@@ -75,6 +75,7 @@ services:
       - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://order_service:8000}
       - MONGO_URL=${DISPATCHER_MONGO_URL:-mongodb://dispatcher_mongo:27017/dispatcher_db}
       - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+      - 'DISPATCHER_ACCESS_PROFILES_BOOTSTRAP={"default-authenticated":{"subject":"default-authenticated","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]}}'
     networks:
       - internal_network
     depends_on:
@@ -112,6 +113,7 @@ services:
       - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://order_service:8000}
       - MONGO_URL=${DISPATCHER_MONGO_URL:-mongodb://dispatcher_mongo:27017/dispatcher_db}
       - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+      - 'DISPATCHER_ACCESS_PROFILES_BOOTSTRAP={"default-authenticated":{"subject":"default-authenticated","permissions":[{"resource":"/products","methods":["GET","POST","PUT","PATCH","DELETE"]},{"resource":"/orders","methods":["GET","POST","PATCH","DELETE"]}]}}'
       - PYTHONPATH=/workspace
     networks:
       - internal_network
