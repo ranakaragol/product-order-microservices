@@ -117,10 +117,14 @@ async def proxy_auth(path: str, request: Request):
         return _service_unavailable_response()
     
 
-@app.api_route("/products/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("/products/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_products(request: Request, path: str = ""):
-    status, payload = await forward_request(request, PRODUCT_SERVICE_URL, path)
-    return JSONResponse(status_code=status, content=payload)
+    full_path = f"products/{path}"
+    try:
+        status, payload = await forward_request(request, PRODUCT_SERVICE_URL, full_path)
+        return JSONResponse(status_code=status, content=payload)
+    except Exception:
+        return _service_unavailable_response()
 
 
 @app.api_route("/products", methods=["GET", "POST"])
@@ -151,4 +155,3 @@ async def proxy_orders_root(request: Request):
         return JSONResponse(status_code=status, content=payload)
     except Exception:
         return _service_unavailable_response()
-

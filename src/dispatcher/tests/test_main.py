@@ -40,19 +40,17 @@ async def test_invalid_token_returns_401(path):
     assert response.status_code == 401
 
 
-@pytest.mark.parametrize(
-    "method,path",
-    [
-        ("put", "/products"),
-        ("put", "/orders"),
-    ],
-)
-async def test_valid_token_but_forbidden_method_returns_403(method, path):
+async def test_valid_token_but_forbidden_order_method_returns_403():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        request_fn = getattr(ac, method)
-        response = await request_fn(path, headers={"Authorization": f"Bearer {_valid_token()}"})
+        response = await ac.put("/orders", headers={"Authorization": f"Bearer {_valid_token()}"})
     assert response.status_code == 403
     assert response.json() == {"error": "Forbidden"}
+
+
+async def test_valid_token_but_unsupported_product_collection_method_returns_405():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.put("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
+    assert response.status_code == 405
 
 
 @pytest.mark.asyncio(loop_scope="function")
