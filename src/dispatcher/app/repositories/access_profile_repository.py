@@ -7,7 +7,14 @@ BOOTSTRAP_PROFILES_ENV = "DISPATCHER_ACCESS_PROFILES_BOOTSTRAP"
 DEFAULT_AUTHENTICATED_SUBJECT = "default-authenticated"
 
 
-def _default_permissions() -> list[dict]:
+def _read_only_permissions() -> list[dict]:
+    return [
+        {"resource": "/products", "methods": ["GET"]},
+        {"resource": "/orders", "methods": ["GET"]},
+    ]
+
+
+def _elevated_permissions() -> list[dict]:
     return [
         {"resource": "/products", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
         {"resource": "/orders", "methods": ["GET", "POST", "PATCH", "DELETE"]},
@@ -18,12 +25,20 @@ def _default_bootstrap_profiles() -> dict[str, dict]:
     return {
         DEFAULT_AUTHENTICATED_SUBJECT: {
             "subject": DEFAULT_AUTHENTICATED_SUBJECT,
-            "permissions": _default_permissions(),
+            "permissions": _read_only_permissions(),
         },
         "dispatcher-user": {
             "subject": "dispatcher-user",
-            "permissions": _default_permissions(),
-        }
+            "permissions": _elevated_permissions(),
+        },
+        "alice": {
+            "subject": "alice",
+            "permissions": _elevated_permissions(),
+        },
+        "bob": {
+            "subject": "bob",
+            "permissions": _read_only_permissions(),
+        },
     }
 
 
