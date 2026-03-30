@@ -2,7 +2,7 @@ import asyncio
 import os
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from app.core.security import evaluate_authorization
 from fastapi import Request
@@ -41,6 +41,18 @@ def _parse_upstream_payload(upstream_response: httpx.Response):
         return upstream_response.text
 
 
+def _build_service_path(resource: str, path: str = "") -> str:
+    suffix = path.lstrip("/")
+    return resource if not suffix else f"{resource}/{suffix}"
+
+
+def _build_proxy_response(status_code: int, payload):
+    if status_code == 204 or payload is None:
+        return Response(status_code=status_code)
+
+    return JSONResponse(status_code=status_code, content=payload)
+
+
 async def forward_request(request:Request, base_url:str, path:str):
     # """Genel mikroservis yönlendirme fonksiyonu"""
     # url = f"{base_url.rstrip('/')}/{request.url.path.lstrip('/')}"
@@ -72,6 +84,14 @@ async def forward_auth_request(request: Request, path: str):
 
     payload = _parse_upstream_payload(upstream_response)
     return upstream_response.status_code, payload
+
+
+async def _proxy_resource_request(request: Request, base_url: str, path: str):
+    try:
+        status, payload = await forward_request(request, base_url, path)
+        return _build_proxy_response(status, payload)
+    except Exception:
+        return _service_unavailable_response()
 
 
 @app.middleware("http")
@@ -117,17 +137,18 @@ async def proxy_auth(path: str, request: Request):
         return _service_unavailable_response()
     
 
-@app.api_route("/products/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("/products/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_products(request: Request, path: str = ""):
-    status, payload = await forward_request(request, PRODUCT_SERVICE_URL, path)
-    return JSONResponse(status_code=status, content=payload)
+    return await _proxy_resource_request(
+        request,
+        PRODUCT_SERVICE_URL,
+        _build_service_path("products", path),
+    )
 
 
 @app.api_route("/products", methods=["GET", "POST"])
 async def proxy_products_root(request: Request):
-    # Boş string yerine "products" gönderiyoruz
-    status, payload = await forward_request(request, PRODUCT_SERVICE_URL, "products")
-    return JSONResponse(status_code=status, content=payload)
+    return await _proxy_resource_request(request, PRODUCT_SERVICE_URL, "products")
 
 
 
@@ -137,18 +158,12 @@ async def proxy_products_root(request: Request):
 #     return JSONResponse(status_code=status, content=payload)
 @app.api_route("/orders/{path:path}", methods=["GET", "POST", "PATCH", "DELETE"])
 async def proxy_orders(request: Request, path: str = ""):
-    full_path = f"orders/{path}"
-    try:
-        status, payload = await forward_request(request, ORDER_SERVICE_URL, full_path)
-        return JSONResponse(status_code=status, content=payload)
-    except Exception:
-        return _service_unavailable_response()
+    return await _proxy_resource_request(
+        request,
+        ORDER_SERVICE_URL,
+        _build_service_path("orders", path),
+    )
 
 @app.api_route("/orders", methods=["GET", "POST"])
 async def proxy_orders_root(request: Request):
-    try:
-        status, payload = await forward_request(request, ORDER_SERVICE_URL, "orders")
-        return JSONResponse(status_code=status, content=payload)
-    except Exception:
-        return _service_unavailable_response()
-
+    return await _proxy_resource_request(request, ORDER_SERVICE_URL, "orders")

@@ -40,19 +40,17 @@ async def test_invalid_token_returns_401(path):
     assert response.status_code == 401
 
 
-@pytest.mark.parametrize(
-    "method,path",
-    [
-        ("put", "/products"),
-        ("put", "/orders"),
-    ],
-)
-async def test_valid_token_but_forbidden_method_returns_403(method, path):
+async def test_valid_token_but_forbidden_order_method_returns_403():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        request_fn = getattr(ac, method)
-        response = await request_fn(path, headers={"Authorization": f"Bearer {_valid_token()}"})
+        response = await ac.put("/orders", headers={"Authorization": f"Bearer {_valid_token()}"})
     assert response.status_code == 403
     assert response.json() == {"error": "Forbidden"}
+
+
+async def test_valid_token_but_unsupported_product_collection_method_returns_405():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.put("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
+    assert response.status_code == 405
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -99,6 +97,175 @@ async def test_products_route_is_forwarded(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"message": "product ok"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_detail_get_route_is_forwarded(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        assert base_url.endswith("product_service:8000")
+        assert path == "products/abc123"
+        return 200, {"id": "abc123", "name": "Keyboard"}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.get("/products/abc123", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "abc123", "name": "Keyboard"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_create_route_forwards_body_and_preserves_201(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        assert base_url.endswith("product_service:8000")
+        assert path == "products"
+        assert await request.json() == {
+            "name": "Keyboard",
+            "description": "Mechanical",
+            "price": 99.9,
+            "stock": 12,
+        }
+        return 201, {"id": "p1", "name": "Keyboard"}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    payload = {
+        "name": "Keyboard",
+        "description": "Mechanical",
+        "price": 99.9,
+        "stock": 12,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.post("/products", json=payload, headers=headers)
+
+    assert response.status_code == 201
+    assert response.json() == {"id": "p1", "name": "Keyboard"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_detail_put_route_is_forwarded(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        assert base_url.endswith("product_service:8000")
+        assert path == "products/abc123"
+        assert await request.json() == {
+            "name": "Keyboard Pro",
+            "description": "Hot swap",
+            "price": 129.9,
+            "stock": 10,
+        }
+        return 200, {"id": "abc123", "name": "Keyboard Pro"}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    payload = {
+        "name": "Keyboard Pro",
+        "description": "Hot swap",
+        "price": 129.9,
+        "stock": 10,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.put("/products/abc123", json=payload, headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "abc123", "name": "Keyboard Pro"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_detail_patch_route_is_forwarded(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        assert base_url.endswith("product_service:8000")
+        assert path == "products/abc123"
+        assert await request.json() == {"stock": 8}
+        return 200, {"id": "abc123", "stock": 8}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.patch("/products/abc123", json={"stock": 8}, headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "abc123", "stock": 8}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_detail_delete_route_returns_204(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        assert base_url.endswith("product_service:8000")
+        assert path == "products/abc123"
+        return 204, None
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.delete("/products/abc123", headers=headers)
+
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_detail_404_is_preserved(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        assert path == "products/missing-id"
+        return 404, {"detail": "Product not found"}
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.get("/products/missing-id", headers=headers)
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Product not found"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_upstream_connection_error_returns_503(monkeypatch):
+    async def fake_forward(request, base_url, path):
+        raise httpx.ConnectError("upstream down")
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        response = await ac.get("/products/abc123", headers=headers)
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "Service Unavailable"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_detail_put_requires_authentication():
+    payload = {
+        "name": "Keyboard Pro",
+        "description": "Hot swap",
+        "price": 129.9,
+        "stock": 10,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.put("/products/abc123", json=payload)
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Unauthorized"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_product_detail_patch_rejects_invalid_token():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.patch(
+            "/products/abc123",
+            json={"stock": 8},
+            headers={"Authorization": "Bearer invalid-token"},
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Unauthorized"}
+
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_orders_route_is_forwarded(monkeypatch):
@@ -204,17 +371,3 @@ async def test_unknown_route_returns_404():
         response = await ac.get("/unknown")
 
     assert response.status_code == 404
-
-@pytest.mark.asyncio(loop_scope="function")
-async def test_body_passthrough(monkeypatch):
-    async def fake_forward(request, base_url, path):
-        body = await request.json()
-        assert body == {"name": "test-product"}
-        return 200, {"ok": True}
-
-    monkeypatch.setattr("app.main.forward_request", fake_forward)
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        headers = {"Authorization": f"Bearer {_valid_token()}"}
-        response = await ac.post("/products", json={"name": "test-product"}, headers=headers)
-    assert response.status_code == 200

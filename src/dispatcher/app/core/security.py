@@ -7,7 +7,7 @@ SECRET_KEY=os.getenv("SECRET_KEY", "yazlab-secret-key")
 ALGORITHM="HS256"
 PROTECTED_PREFIXES = ("/products", "/orders")
 ALLOWED_METHODS = {
-    "/products": {"GET", "POST"},
+    "/products": {"GET", "POST", "PUT", "PATCH", "DELETE"},
     "/orders": {"GET", "POST", "PATCH", "DELETE"},
     "/auth":{"POST"},
 }
