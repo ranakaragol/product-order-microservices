@@ -13,4 +13,4 @@ client = AsyncIOMotorClient(
 )
 db=client[DB_NAME]
 logs_collection=db["traffic_logs"]
-
+access_profiles_collection=db["access_profiles"]

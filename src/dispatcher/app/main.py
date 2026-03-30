@@ -53,6 +53,29 @@ def _build_proxy_response(status_code: int, payload):
     return JSONResponse(status_code=status_code, content=payload)
 
 
+def _build_log_entry(request: Request, status_code: int) -> TrafficLog:
+    path_parts = request.url.path.strip("/").split("/")
+    service_name = path_parts[0] if path_parts else "root"
+    return TrafficLog(
+        method=request.method,
+        path=request.url.path,
+        service=service_name,
+        status_code=status_code,
+        client_ip=request.client.host if request.client else "unknown",
+    )
+
+
+async def _write_traffic_log(request: Request, status_code: int):
+    try:
+        log_entry = _build_log_entry(request, status_code)
+        await asyncio.wait_for(
+            logs_collection.insert_one(log_entry.model_dump()),
+            timeout=LOG_INSERT_TIMEOUT_SECONDS,
+        )
+    except Exception as e:
+        print(f"Logging error: {e}")
+
+
 async def forward_request(request:Request, base_url:str, path:str):
     # """Genel mikroservis yönlendirme fonksiyonu"""
     # url = f"{base_url.rstrip('/')}/{request.url.path.lstrip('/')}"
@@ -97,31 +120,15 @@ async def _proxy_resource_request(request: Request, base_url: str, path: str):
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
     
-    status_code = evaluate_authorization(request)
+    status_code = await evaluate_authorization(request)
     if status_code == 401:
+        await _write_traffic_log(request, 401)
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if status_code == 403:
+        await _write_traffic_log(request, 403)
         return JSONResponse(status_code=403, content={"error": "Forbidden"})
     response= await call_next(request)
-
-    try:
-        path_parts=request.url.path.strip("/").split("/")
-        service_name=path_parts[0] if path_parts else "root"
-
-        log_entry= TrafficLog(
-            method=request.method,
-            path=request.url.path,
-            service=service_name,
-            status_code=response.status_code,
-            client_ip= request.client.host if request.client else "unknown"
-        )
-        await asyncio.wait_for(
-            logs_collection.insert_one(log_entry.model_dump()),
-            timeout=LOG_INSERT_TIMEOUT_SECONDS,
-        )
-    except Exception as e:
-        print(f"Logging error: {e}")
-
+    await _write_traffic_log(request, response.status_code)
     return response
 
 @app.get("/")
