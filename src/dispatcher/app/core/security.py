@@ -1,16 +1,13 @@
 import os 
 from fastapi import Request
 from jose import JWTError, jwt
+from app.repositories.access_profile_repository import AccessProfileRepository
 
 #Token'ları çözmek için Auth servisiyle aynı gizli anahtarı kullanılmalı
 SECRET_KEY=os.getenv("SECRET_KEY", "yazlab-secret-key")
 ALGORITHM="HS256"
 PROTECTED_PREFIXES = ("/products", "/orders")
-ALLOWED_METHODS = {
-    "/products": {"GET", "POST", "PUT", "PATCH", "DELETE"},
-    "/orders": {"GET", "POST", "PATCH", "DELETE"},
-    "/auth":{"POST"},
-}
+_access_profile_repository = AccessProfileRepository()
 
 def verify_token(token:str):
     """Token'ı çözer, sahteyse veya süresi dolmuşsa None döner"""
@@ -25,11 +22,23 @@ def _is_protected_path(path: str) -> bool:
     return path.startswith(PROTECTED_PREFIXES)
 
 
-def _is_method_allowed(path: str, method: str) -> bool:
-    for prefix, methods in ALLOWED_METHODS.items():
-        if path.startswith(prefix):
-            return method.upper() in methods
-    return True
+def get_access_profile_repository() -> AccessProfileRepository:
+    return _access_profile_repository
+
+
+def _is_method_allowed(profile: dict | None, path: str, method: str) -> bool:
+    if not profile:
+        return False
+
+    normalized_method = method.upper()
+    permissions = profile.get("permissions", [])
+    for permission in permissions:
+        resource = permission.get("resource")
+        methods = permission.get("methods", [])
+        if resource and path.startswith(resource) and normalized_method in {item.upper() for item in methods}:
+            return True
+
+    return False
 
 
 def _extract_bearer_token(auth_header: str | None) -> str | None:
@@ -43,30 +52,20 @@ def _extract_bearer_token(auth_header: str | None) -> str | None:
     token = parts[1].strip()
     return token or None
 
-def is_authorized(request: Request)->bool:
-    """Gelen istekte yetki-token olup olmadığını ve geçerliliğini kontrol eder"""
-    #sadece ürünler ve siparişler rotası korumaya alınıyor
-    if _is_protected_path(request.url.path):
-        token = _extract_bearer_token(request.headers.get("Authorization"))
-        if not token:
-            return False
-
-        #Token sahteyse veya süresi geçmişse Reddet
-        if not verify_token(token):
-            return False
-        
-    #Diğer rotalariçin şimdilik izin ver
-    return True
-
-
-def evaluate_authorization(request: Request) -> int:
+async def evaluate_authorization(request: Request) -> int:
     if not _is_protected_path(request.url.path):
         return 200
 
-    if not is_authorized(request):
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    if not token:
         return 401
 
-    if not _is_method_allowed(request.url.path, request.method):
+    claims = verify_token(token)
+    if not claims:
+        return 401
+
+    profile = await get_access_profile_repository().get_profile_by_subject(claims.get("sub"))
+    if not _is_method_allowed(profile, request.url.path, request.method):
         return 403
 
     return 200
