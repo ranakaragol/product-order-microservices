@@ -86,11 +86,11 @@ services:
     build:
       context: ./auth_service
       target: test
+    working_dir: /workspace
     environment:
-      - MONGO_URL=${ORDER_MONGO_URL:-mongodb://order_mongo:27017/order_db}
-      - AUTH_SERVICE_URL=http://auth_service:8000
-      - PRODUCT_SERVICE_URL=http://product_service:8000
-      - PYTHONPATH=/app
+      - MONGO_URL=${AUTH_MONGO_URL:-mongodb://auth_mongo:27017/auth_db}
+      - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+      - PYTHONPATH=/workspace
     networks:
       - internal_network
     depends_on:
@@ -99,18 +99,20 @@ services:
       - ./auth_service:/workspace
     profiles:
       - test
-    command: ["sh", "-lc", "PYTHONPATH=/workspace pytest /workspace/tests"]
+    command: ["pytest", "tests"]
 
   dispatcher_tests:
     build:
       context: ./dispatcher
       target: test
+    working_dir: /workspace
     environment:
       - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth_service:8000}
       - PRODUCT_SERVICE_URL=${PRODUCT_SERVICE_URL:-http://product_service:8000}
       - ORDER_SERVICE_URL=${ORDER_SERVICE_URL:-http://order_service:8000}
       - MONGO_URL=${DISPATCHER_MONGO_URL:-mongodb://dispatcher_mongo:27017/dispatcher_db}
       - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+      - PYTHONPATH=/workspace
     networks:
       - internal_network
     depends_on:
@@ -122,14 +124,16 @@ services:
       - ./dispatcher:/workspace
     profiles:
       - test
-    command: ["sh", "-lc", "PYTHONPATH=/workspace pytest /workspace/tests"]
+    command: ["pytest", "tests"]
 
   product_tests:
     build:
       context: ./product_service
       target: test
+    working_dir: /workspace
     environment:
       - MONGO_URL=${PRODUCT_MONGO_URL:-mongodb://product_mongo:27017/product_db}
+      - PYTHONPATH=/workspace
     networks:
       - internal_network
     depends_on:
@@ -138,24 +142,25 @@ services:
       - ./product_service:/workspace
     profiles:
       - test
-    command: ["sh", "-lc", "PYTHONPATH=/workspace pytest /workspace/tests"]
+    command: ["pytest", "tests"]
 
   order_tests:
     build:
       context: ./order_service
       target: test
+    working_dir: /workspace
     environment:
       - MONGO_URL=${ORDER_MONGO_URL:-mongodb://order_mongo:27017/order_db}
-      - PYTHONPATH=/app
+      - PYTHONPATH=/workspace
     networks:
       - internal_network
     depends_on:
       - order_mongo
-    # volumes:
-    #   - ./order_service:/workspace
+    volumes:
+      - ./order_service:/workspace
     profiles:
       - test
-    command: ["pytest", "/app/tests"]
+    command: ["pytest", "tests"]
 
 networks:
   internal_network:
