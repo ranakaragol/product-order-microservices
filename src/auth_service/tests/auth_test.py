@@ -85,3 +85,11 @@ async def test_verify_token_invalid_returns_401():
         verify = await ac.get("/verify-token", headers={"Authorization": "Bearer invalid-token"})
 
     assert verify.status_code == 401
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_verify_token_missing_header_returns_401():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        verify = await ac.get("/verify-token")
+
+    assert verify.status_code == 401

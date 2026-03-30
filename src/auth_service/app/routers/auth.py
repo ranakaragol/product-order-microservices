@@ -43,7 +43,7 @@ async def login(user: LoginRequest):
 
 
 @router.get("/verify-token")
-async def verify_token_endpoint(authorization: str = Header(...)):
+async def verify_token_endpoint(authorization: str | None = Header(default=None)):
     auth_service = get_auth_service()
     try:
         return auth_service.verify_token_header(authorization)

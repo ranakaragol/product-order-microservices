@@ -36,9 +36,20 @@ class AuthService:
         return {"message": "Giriş başarılı", "token": token}
 
     def verify_token_header(self, authorization: str) -> dict:
-        token = authorization.replace("Bearer ", "")
+        token = self._extract_bearer_token(authorization)
         payload = verify_token(token)
         if payload is None:
             raise InvalidTokenError()
 
         return {"valid": True, "user": payload["sub"]}
+
+    @staticmethod
+    def _extract_bearer_token(authorization: str | None) -> str:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise InvalidTokenError()
+
+        token = authorization.split(" ", 1)[1].strip()
+        if not token:
+            raise InvalidTokenError()
+
+        return token
