@@ -11,6 +11,16 @@ Python + FastAPI kullanarak Ürün / Sipariş mikroservis sistemi geliştirmek.
 - Locust (yük testi)
 - Grafana (log & trafik)
 
+## Dispatcher Yetkilendirme Profilleri
+Dispatcher, `/products` ve `/orders` isteklerinde yetkilendirmeyi merkezi olarak uygular. Token yoksa veya geçersizse `401` döner; token geçerli olsa bile token içindeki `sub` değeri için rota ve yöntem izni yoksa `403` döner. Açık bir profil tanımlı olmayan doğrulanmış kullanıcılar ise varsayılan olarak `default-authenticated` okuma profiline düşer.
+
+| Örnek durum | Örnek istek | Beklenen davranış |
+| --- | --- | --- |
+| Eksik veya geçersiz token | `GET /products` | Dispatcher isteği aşağı servise iletmeden `401` döner. |
+| `default-authenticated` | `GET /products` ve `POST /products` | Okuma isteği başarılı akışta `200`, yazma isteği `403` döner. |
+| `bob` | `GET /orders` ve `POST /orders` | Okuma isteği başarılı akışta `200`, yazma isteği `403` döner. |
+| `alice` | `POST /products` | Yükseltilmiş erişim nedeniyle istek geçirilir; başarılı oluşturma akışında tipik sonuç `201` olur. |
+
 ## Baseline Test Workflow (P0)
 Run tests per service from each service directory:
 
