@@ -4,10 +4,18 @@ from datetime import datetime, timedelta, timezone
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
 from fastapi import Request
+from app.core.metrics import dispatcher_metrics
 from app.main import app
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 SECRET_KEY = "yazlab-secret-key"
+
+
+@pytest.fixture(autouse=True)
+def reset_dispatcher_metrics():
+    dispatcher_metrics.reset()
+    yield
+    dispatcher_metrics.reset()
 
 
 def _valid_token() -> str:
@@ -516,6 +524,54 @@ async def test_allowed_request_is_logged(monkeypatch):
     assert response.status_code == 200
     assert len(fake_logs.entries) == 1
     assert fake_logs.entries[0]["status_code"] == 200
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_metrics_endpoint_is_public_and_exposes_prometheus_payload():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/metrics")
+
+    assert response.status_code == 200
+    assert "text/plain" in response.headers["content-type"]
+    assert "dispatcher_http_requests_total" in response.text
+    assert "dispatcher_http_request_duration_seconds" in response.text
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_metrics_capture_successful_product_request(monkeypatch):
+    _install_access_profiles(
+        monkeypatch,
+        profiles_by_subject={
+            "dispatcher-user": {
+                "subject": "dispatcher-user",
+                "permissions": [{"resource": "/products", "methods": ["GET"]}],
+            }
+        },
+    )
+
+    async def fake_forward(request, base_url, path):
+        return 200, [{"id": "p1"}]
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
+        metrics_response = await ac.get("/metrics")
+
+    body = metrics_response.text
+    assert 'dispatcher_http_requests_total{method="GET",route="/products",status_code="200"} 1.0' in body
+    assert 'dispatcher_http_request_duration_seconds_count{method="GET",route="/products"} 1.0' in body
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_metrics_capture_unauthorized_request_status(monkeypatch):
+    _install_log_capture(monkeypatch)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        await ac.get("/products")
+        metrics_response = await ac.get("/metrics")
+
+    assert 'dispatcher_http_requests_total{method="GET",route="/products",status_code="401"} 1.0' in metrics_response.text
 
 
 @pytest.mark.asyncio(loop_scope="function")
