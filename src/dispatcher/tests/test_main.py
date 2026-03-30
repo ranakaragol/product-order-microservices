@@ -18,6 +18,39 @@ def _valid_token() -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
 
+class FakeAccessProfileRepository:
+    def __init__(self, profiles_by_subject=None):
+        self._profiles_by_subject = profiles_by_subject or {}
+
+    async def get_profile_by_subject(self, subject: str):
+        return self._profiles_by_subject.get(subject)
+
+
+class FakeLogsCollection:
+    def __init__(self):
+        self.entries = []
+
+    async def insert_one(self, document):
+        self.entries.append(document)
+        return {"acknowledged": True}
+
+
+def _install_access_profiles(monkeypatch, profiles_by_subject=None):
+    import app.core.security as security_mod
+
+    repository = FakeAccessProfileRepository(profiles_by_subject=profiles_by_subject)
+    monkeypatch.setattr(security_mod, "get_access_profile_repository", lambda: repository)
+    return repository
+
+
+def _install_log_capture(monkeypatch):
+    import app.main as dispatcher_mod
+
+    fake_logs = FakeLogsCollection()
+    monkeypatch.setattr(dispatcher_mod, "logs_collection", fake_logs)
+    return fake_logs
+
+
 @pytest.mark.parametrize("path", ["/products", "/orders"])
 async def test_missing_token_returns_401_for_protected_routes(path):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -38,6 +71,52 @@ async def test_invalid_token_returns_401(path):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.get(path, headers={"Authorization": "Bearer invalid-token"})
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_valid_token_without_matching_access_profile_returns_403(monkeypatch):
+    _install_access_profiles(monkeypatch, profiles_by_subject={})
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
+
+    assert response.status_code == 403
+    assert response.json() == {"error": "Forbidden"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_valid_token_with_allowed_access_profile_can_access_product_and_order_routes(monkeypatch):
+    _install_access_profiles(
+        monkeypatch,
+        profiles_by_subject={
+            "dispatcher-user": {
+                "subject": "dispatcher-user",
+                "permissions": [
+                    {"resource": "/products", "methods": ["GET"]},
+                    {"resource": "/orders", "methods": ["PATCH"]},
+                ],
+            }
+        },
+    )
+
+    async def fake_forward(request, base_url, path):
+        if path == "products":
+            return 200, [{"id": "p1"}]
+        if path == "orders/abc123":
+            return 200, {"id": "abc123", "status": "confirmed"}
+        raise AssertionError(f"Unexpected forwarded path: {path}")
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        headers = {"Authorization": f"Bearer {_valid_token()}"}
+        products_response = await ac.get("/products", headers=headers)
+        orders_response = await ac.patch("/orders/abc123", json={"status": "confirmed"}, headers=headers)
+
+    assert products_response.status_code == 200
+    assert products_response.json() == [{"id": "p1"}]
+    assert orders_response.status_code == 200
+    assert orders_response.json() == {"id": "abc123", "status": "confirmed"}
 
 
 async def test_valid_token_but_forbidden_order_method_returns_403():
@@ -371,3 +450,71 @@ async def test_unknown_route_returns_404():
         response = await ac.get("/unknown")
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_missing_token_denied_request_is_logged(monkeypatch):
+    fake_logs = _install_log_capture(monkeypatch)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/products")
+
+    assert response.status_code == 401
+    assert len(fake_logs.entries) == 1
+    assert fake_logs.entries[0]["path"] == "/products"
+    assert fake_logs.entries[0]["status_code"] == 401
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_forbidden_request_is_logged(monkeypatch):
+    _install_access_profiles(monkeypatch, profiles_by_subject={})
+    fake_logs = _install_log_capture(monkeypatch)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
+
+    assert response.status_code == 403
+    assert len(fake_logs.entries) == 1
+    assert fake_logs.entries[0]["path"] == "/products"
+    assert fake_logs.entries[0]["status_code"] == 403
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_allowed_request_is_logged(monkeypatch):
+    _install_access_profiles(
+        monkeypatch,
+        profiles_by_subject={
+            "dispatcher-user": {
+                "subject": "dispatcher-user",
+                "permissions": [{"resource": "/products", "methods": ["GET"]}],
+            }
+        },
+    )
+    fake_logs = _install_log_capture(monkeypatch)
+
+    async def fake_forward(request, base_url, path):
+        return 200, [{"id": "p1"}]
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
+
+    assert response.status_code == 200
+    assert len(fake_logs.entries) == 1
+    assert fake_logs.entries[0]["status_code"] == 200
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_upstream_unavailable_request_is_logged(monkeypatch):
+    _install_log_capture(monkeypatch)
+
+    async def fake_forward(request, base_url, path):
+        raise httpx.ConnectError("upstream down")
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
+
+    assert response.status_code == 503
