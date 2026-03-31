@@ -124,6 +124,33 @@ def _install_real_auth_service_harness(monkeypatch):
     return fake_users
 
 
+def _install_default_read_only_profile(monkeypatch):
+    _install_access_profiles(
+        monkeypatch,
+        profiles_by_subject={
+            DEFAULT_AUTHENTICATED_SUBJECT: {
+                "subject": DEFAULT_AUTHENTICATED_SUBJECT,
+                "permissions": [{"resource": "/products", "methods": ["GET"]}],
+            }
+        },
+    )
+
+
+async def _register_and_login_through_dispatcher(ac: AsyncClient, username: str, password: str) -> str:
+    register_response = await ac.post(
+        "/auth/register",
+        json={"username": username, "password": password},
+    )
+    assert register_response.status_code == 200
+
+    login_response = await ac.post(
+        "/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert login_response.status_code == 200
+    return login_response.json()["token"]
+
+
 @pytest.mark.parametrize("path", ["/products", "/orders"])
 async def test_missing_token_returns_401_for_protected_routes(path):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -236,15 +263,7 @@ async def test_auth_proxy_returns_503_when_upstream_unreachable(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_real_auth_chain_allows_read_only_user_to_get_products(monkeypatch):
-    _install_access_profiles(
-        monkeypatch,
-        profiles_by_subject={
-            DEFAULT_AUTHENTICATED_SUBJECT: {
-                "subject": DEFAULT_AUTHENTICATED_SUBJECT,
-                "permissions": [{"resource": "/products", "methods": ["GET"]}],
-            }
-        },
-    )
+    _install_default_read_only_profile(monkeypatch)
     _install_real_auth_service_harness(monkeypatch)
 
     async def fake_forward(request, base_url, path):
@@ -255,19 +274,11 @@ async def test_real_auth_chain_allows_read_only_user_to_get_products(monkeypatch
     monkeypatch.setattr("app.main.forward_request", fake_forward)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        register_response = await ac.post(
-            "/auth/register",
-            json={"username": "real-auth-reader", "password": "reader-password"},
+        token = await _register_and_login_through_dispatcher(
+            ac,
+            username="real-auth-reader",
+            password="reader-password",
         )
-        assert register_response.status_code == 200
-
-        login_response = await ac.post(
-            "/auth/login",
-            json={"username": "real-auth-reader", "password": "reader-password"},
-        )
-        assert login_response.status_code == 200
-
-        token = login_response.json()["token"]
         products_response = await ac.get(
             "/products",
             headers={"Authorization": f"Bearer {token}"},
@@ -279,15 +290,7 @@ async def test_real_auth_chain_allows_read_only_user_to_get_products(monkeypatch
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_real_auth_chain_forbids_read_only_user_product_create(monkeypatch):
-    _install_access_profiles(
-        monkeypatch,
-        profiles_by_subject={
-            DEFAULT_AUTHENTICATED_SUBJECT: {
-                "subject": DEFAULT_AUTHENTICATED_SUBJECT,
-                "permissions": [{"resource": "/products", "methods": ["GET"]}],
-            }
-        },
-    )
+    _install_default_read_only_profile(monkeypatch)
     _install_real_auth_service_harness(monkeypatch)
 
     async def fake_forward(request, base_url, path):
@@ -296,19 +299,11 @@ async def test_real_auth_chain_forbids_read_only_user_product_create(monkeypatch
     monkeypatch.setattr("app.main.forward_request", fake_forward)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        register_response = await ac.post(
-            "/auth/register",
-            json={"username": "real-auth-writer", "password": "writer-password"},
+        token = await _register_and_login_through_dispatcher(
+            ac,
+            username="real-auth-writer",
+            password="writer-password",
         )
-        assert register_response.status_code == 200
-
-        login_response = await ac.post(
-            "/auth/login",
-            json={"username": "real-auth-writer", "password": "writer-password"},
-        )
-        assert login_response.status_code == 200
-
-        token = login_response.json()["token"]
         create_response = await ac.post(
             "/products",
             json={"name": "Mouse", "description": None, "price": 10.0, "stock": 3},
@@ -317,6 +312,16 @@ async def test_real_auth_chain_forbids_read_only_user_product_create(monkeypatch
 
     assert create_response.status_code == 403
     assert create_response.json() == {"error": "Forbidden"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_auth_verify_token_without_header_returns_401_via_real_auth_service(monkeypatch):
+    _install_real_auth_service_harness(monkeypatch)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/auth/verify-token")
+
+    assert response.status_code == 401
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_products_route_is_forwarded(monkeypatch):
