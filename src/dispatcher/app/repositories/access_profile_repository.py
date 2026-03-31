@@ -89,6 +89,20 @@ class AccessProfileRepository:
         self._collection = collection
         self._bootstrap_profiles = bootstrap_profiles if bootstrap_profiles is not None else _load_bootstrap_profiles()
 
+    async def seed_bootstrap_profiles(self) -> None:
+        if self._collection is None:
+            return
+
+        for profile in self._bootstrap_profiles.values():
+            subject = profile["subject"]
+            if await self._get_persisted_profile(subject):
+                continue
+
+            try:
+                await self._collection.insert_one(dict(profile))
+            except Exception:
+                continue
+
     async def get_profile_by_subject(self, subject: str | None) -> dict | None:
         if not subject:
             return None
