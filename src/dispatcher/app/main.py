@@ -31,6 +31,13 @@ def _is_upstream_failure(exc: Exception) -> bool:
     return isinstance(exc, httpx.RequestError)
 
 
+def _proxy_error_response(exc: Exception) -> JSONResponse:
+    if _is_upstream_failure(exc):
+        return _service_unavailable_response()
+
+    return _service_unavailable_response()
+
+
 def _build_auth_upstream_url(path: str) -> str:
     return f"{AUTH_SERVICE_URL.rstrip('/')}/{path.lstrip('/')}"
 
@@ -139,10 +146,10 @@ async def _proxy_resource_request(request: Request, base_url: str, path: str):
         request_forwarder = getattr(request.app.state, "request_forwarder", forward_request)
         status, payload = await request_forwarder(request, base_url, path)
         return _build_proxy_response(status, payload)
-    except httpx.RequestError:
-        return _service_unavailable_response()
-    except Exception:
-        return _service_unavailable_response()
+    except httpx.RequestError as exc:
+        return _proxy_error_response(exc)
+    except Exception as exc:
+        return _proxy_error_response(exc)
 
 
 async def check_auth(request: Request, call_next):
@@ -164,10 +171,10 @@ async def proxy_auth(path: str, request: Request):
     try:
         status_code, payload = await forward_auth_request(request, path) 
         return JSONResponse(status_code=status_code, content=payload)
-    except httpx.RequestError:
-        return _service_unavailable_response()
-    except Exception:
-        return _service_unavailable_response()
+    except httpx.RequestError as exc:
+        return _proxy_error_response(exc)
+    except Exception as exc:
+        return _proxy_error_response(exc)
     
 
 async def proxy_products(request: Request, path: str = ""):
