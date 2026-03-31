@@ -27,6 +27,10 @@ def _service_unavailable_response() -> JSONResponse:
     return JSONResponse(status_code=503, content={"error": "Service Unavailable"})
 
 
+def _internal_server_error_response() -> JSONResponse:
+    return JSONResponse(status_code=500, content={"error": "Internal Server Error"})
+
+
 def _is_upstream_failure(exc: Exception) -> bool:
     return isinstance(exc, httpx.RequestError)
 
@@ -35,7 +39,7 @@ def _proxy_error_response(exc: Exception) -> JSONResponse:
     if _is_upstream_failure(exc):
         return _service_unavailable_response()
 
-    return _service_unavailable_response()
+    return _internal_server_error_response()
 
 
 def _build_auth_upstream_url(path: str) -> str:
