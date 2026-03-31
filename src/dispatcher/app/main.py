@@ -1,5 +1,6 @@
 import asyncio
 import os
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, Response
@@ -9,7 +10,6 @@ from fastapi import Request
 from app.core.database import logs_collection
 from app.models.log import TrafficLog
 
-app= FastAPI()
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8000")
 PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://product_service:8000")
 ORDER_SERVICE_URL=os.getenv("ORDER_SERVICE_URL", "http://order_service:8000")
@@ -85,6 +85,15 @@ async def seed_dispatcher_access_profiles() -> None:
     await get_access_profile_repository().seed_bootstrap_profiles()
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await seed_dispatcher_access_profiles()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
 async def forward_request(request:Request, base_url:str, path:str):
     # """Genel mikroservis yönlendirme fonksiyonu"""
     # url = f"{base_url.rstrip('/')}/{request.url.path.lstrip('/')}"
@@ -138,10 +147,6 @@ async def check_auth(request: Request, call_next):
     await _write_traffic_log(request, response.status_code)
     return response
 
-
-@app.on_event("startup")
-async def startup_seed_dispatcher_access_profiles():
-    await seed_dispatcher_access_profiles()
 
 @app.get("/")
 def read_root():
