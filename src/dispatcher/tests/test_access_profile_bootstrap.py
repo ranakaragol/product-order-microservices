@@ -109,6 +109,29 @@ async def test_seed_bootstrap_profiles_keeps_persisted_subject_profile_as_source
     assert collection.get_document("alice") == persisted_profile
 
 
+async def test_repository_uses_persisted_default_profile_for_subject_without_persisted_profile():
+    collection = FakeAccessProfilesCollection(documents=[_default_authenticated_profile()])
+    repository = AccessProfileRepository(
+        collection=collection,
+        bootstrap_profiles={"alice": _elevated_profile("alice")},
+    )
+
+    profile = await repository.get_profile_by_subject("alice")
+
+    assert profile == _default_authenticated_profile()
+
+
+async def test_repository_requires_persisted_profiles_for_authorization_lookup():
+    repository = AccessProfileRepository(
+        collection=FakeNoopCollection(),
+        bootstrap_profiles={DEFAULT_AUTHENTICATED_SUBJECT: _default_authenticated_profile()},
+    )
+
+    profile = await repository.get_profile_by_subject("real-user-01")
+
+    assert profile is None
+
+
 async def test_repository_falls_back_to_default_authenticated_profile_for_real_username():
     repository = AccessProfileRepository(
         collection=FakeNoopCollection(),
