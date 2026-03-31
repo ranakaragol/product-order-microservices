@@ -104,16 +104,10 @@ class AccessProfileRepository:
         if persisted_profile:
             return persisted_profile
 
-        bootstrap_profile = self._bootstrap_profiles.get(subject)
-        if bootstrap_profile:
-            return bootstrap_profile
-
         if subject != DEFAULT_AUTHENTICATED_SUBJECT:
-            default_persisted_profile = await self._get_persisted_profile(DEFAULT_AUTHENTICATED_SUBJECT)
-            if default_persisted_profile:
-                return default_persisted_profile
+            return await self._get_persisted_profile(DEFAULT_AUTHENTICATED_SUBJECT)
 
-        return self._bootstrap_profiles.get(DEFAULT_AUTHENTICATED_SUBJECT)
+        return None
 
     async def _get_persisted_profile(self, subject: str) -> dict | None:
         if self._collection is None:

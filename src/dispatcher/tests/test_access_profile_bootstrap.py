@@ -133,8 +133,9 @@ async def test_repository_requires_persisted_profiles_for_authorization_lookup()
 
 
 async def test_repository_falls_back_to_default_authenticated_profile_for_real_username():
+    collection = FakeAccessProfilesCollection(documents=[_default_authenticated_profile()])
     repository = AccessProfileRepository(
-        collection=FakeNoopCollection(),
+        collection=collection,
         bootstrap_profiles={DEFAULT_AUTHENTICATED_SUBJECT: _default_authenticated_profile()},
     )
 
@@ -146,7 +147,9 @@ async def test_repository_falls_back_to_default_authenticated_profile_for_real_u
 async def test_repository_default_bootstrap_profile_is_read_only(monkeypatch):
     monkeypatch.delenv("DISPATCHER_ACCESS_PROFILES_BOOTSTRAP", raising=False)
 
-    repository = AccessProfileRepository(collection=FakeNoopCollection())
+    collection = FakeAccessProfilesCollection()
+    repository = AccessProfileRepository(collection=collection)
+    await repository.seed_bootstrap_profiles()
     profile = await repository.get_profile_by_subject("real-user-02")
 
     assert profile is not None
@@ -168,7 +171,7 @@ async def test_real_username_token_can_access_products_with_default_authenticate
     import app.core.security as security_mod
 
     repository = AccessProfileRepository(
-        collection=FakeNoopCollection(),
+        collection=FakeAccessProfilesCollection(documents=[_default_authenticated_profile()]),
         bootstrap_profiles={DEFAULT_AUTHENTICATED_SUBJECT: _default_authenticated_profile()},
     )
     monkeypatch.setattr(security_mod, "get_access_profile_repository", lambda: repository)
@@ -191,7 +194,7 @@ async def test_real_username_token_is_forbidden_for_product_create_with_default_
     import app.core.security as security_mod
 
     repository = AccessProfileRepository(
-        collection=FakeNoopCollection(),
+        collection=FakeAccessProfilesCollection(documents=[_default_authenticated_profile()]),
         bootstrap_profiles={DEFAULT_AUTHENTICATED_SUBJECT: _default_authenticated_profile()},
     )
     monkeypatch.setattr(security_mod, "get_access_profile_repository", lambda: repository)
@@ -217,7 +220,12 @@ async def test_explicit_elevated_subject_can_create_product(monkeypatch):
 
     elevated_subject = "alice"
     repository = AccessProfileRepository(
-        collection=FakeNoopCollection(),
+        collection=FakeAccessProfilesCollection(
+            documents=[
+                _default_authenticated_profile(),
+                _elevated_profile(elevated_subject),
+            ]
+        ),
         bootstrap_profiles={
             DEFAULT_AUTHENTICATED_SUBJECT: _default_authenticated_profile(),
             elevated_subject: _elevated_profile(elevated_subject),

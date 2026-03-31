@@ -136,6 +136,21 @@ def _install_default_read_only_profile(monkeypatch):
     )
 
 
+def _install_dispatcher_user_full_access(monkeypatch):
+    _install_access_profiles(
+        monkeypatch,
+        profiles_by_subject={
+            "dispatcher-user": {
+                "subject": "dispatcher-user",
+                "permissions": [
+                    {"resource": "/products", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+                    {"resource": "/orders", "methods": ["GET", "POST", "PATCH", "DELETE"]},
+                ],
+            }
+        },
+    )
+
+
 async def _register_and_login_through_dispatcher(ac: AsyncClient, username: str, password: str) -> str:
     register_response = await ac.post(
         "/auth/register",
@@ -219,14 +234,18 @@ async def test_valid_token_with_allowed_access_profile_can_access_product_and_or
     assert orders_response.json() == {"id": "abc123", "status": "confirmed"}
 
 
-async def test_valid_token_but_forbidden_order_method_returns_403():
+async def test_valid_token_but_forbidden_order_method_returns_403(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.put("/orders", headers={"Authorization": f"Bearer {_valid_token()}"})
     assert response.status_code == 403
     assert response.json() == {"error": "Forbidden"}
 
 
-async def test_valid_token_but_unsupported_product_collection_method_returns_405():
+async def test_valid_token_but_unsupported_product_collection_method_returns_405(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.put("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
     assert response.status_code == 405
@@ -325,6 +344,8 @@ async def test_auth_verify_token_without_header_returns_401_via_real_auth_servic
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_products_route_is_forwarded(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         # Dispatcher doğru servise yönlendiriyor mu?
         assert base_url.endswith("product_service:8000")
@@ -343,6 +364,8 @@ async def test_products_route_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_product_detail_get_route_is_forwarded(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("product_service:8000")
         assert path == "products/abc123"
@@ -360,6 +383,8 @@ async def test_product_detail_get_route_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_product_create_route_forwards_body_and_preserves_201(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("product_service:8000")
         assert path == "products"
@@ -389,6 +414,8 @@ async def test_product_create_route_forwards_body_and_preserves_201(monkeypatch)
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_product_detail_put_route_is_forwarded(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("product_service:8000")
         assert path == "products/abc123"
@@ -418,6 +445,8 @@ async def test_product_detail_put_route_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_product_detail_patch_route_is_forwarded(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("product_service:8000")
         assert path == "products/abc123"
@@ -436,6 +465,8 @@ async def test_product_detail_patch_route_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_product_detail_delete_route_returns_204(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("product_service:8000")
         assert path == "products/abc123"
@@ -452,6 +483,8 @@ async def test_product_detail_delete_route_returns_204(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_product_detail_404_is_preserved(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert path == "products/missing-id"
         return 404, {"detail": "Product not found"}
@@ -468,6 +501,8 @@ async def test_product_detail_404_is_preserved(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_product_upstream_connection_error_returns_503(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         raise httpx.ConnectError("upstream down")
 
@@ -511,6 +546,8 @@ async def test_product_detail_patch_rejects_invalid_token():
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_orders_route_is_forwarded(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("order_service:8000")
         assert path == "orders"
@@ -528,6 +565,8 @@ async def test_orders_route_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_order_detail_get_route_is_forwarded(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("order_service:8000")
         assert path == "orders/abc123"
@@ -545,6 +584,8 @@ async def test_order_detail_get_route_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_order_detail_patch_route_is_forwarded(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("order_service:8000")
         assert path == "orders/abc123"
@@ -564,6 +605,8 @@ async def test_order_detail_patch_route_is_forwarded(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_order_detail_delete_route_returns_204(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         assert base_url.endswith("order_service:8000")
         assert path == "orders/abc123"
@@ -580,6 +623,8 @@ async def test_order_detail_delete_route_returns_204(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_order_detail_404_is_preserved(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         return 404, {"detail": "Order not found"}
 
@@ -595,6 +640,8 @@ async def test_order_detail_404_is_preserved(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_order_upstream_connection_error_returns_503(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
+
     async def fake_forward(request, base_url, path):
         raise httpx.ConnectError("upstream down")
 
@@ -683,6 +730,7 @@ async def test_allowed_request_is_logged(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_upstream_unavailable_request_is_logged(monkeypatch):
+    _install_dispatcher_user_full_access(monkeypatch)
     fake_logs = _install_log_capture(monkeypatch)
 
     async def fake_forward(request, base_url, path):
