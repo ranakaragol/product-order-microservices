@@ -47,6 +47,25 @@ class FakeLogsCollection:
         return {"acknowledged": True}
 
 
+def _build_seeded_dispatcher_app():
+    from app.main import create_app
+
+    access_profiles = FakeAccessProfilesCollection()
+    logs = FakeLogsCollection()
+    repository = AccessProfileRepository(collection=access_profiles)
+
+    async def fake_forward(request, base_url, path):
+        assert path == "products"
+        return 200, [{"id": "p-seeded"}]
+
+    seeded_app = create_app(
+        access_profile_repository=repository,
+        logs_collection=logs,
+        request_forwarder=fake_forward,
+    )
+    return seeded_app, access_profiles
+
+
 def _token_for_subject(subject: str) -> str:
     payload = {
         "sub": subject,
@@ -261,23 +280,8 @@ async def test_explicit_elevated_subject_can_create_product(monkeypatch):
     assert response.json() == {"id": "p-3", "name": "Mouse"}
 
 
-def test_startup_seeding_drives_authorization_from_persisted_profiles_without_repository_monkeypatch():
-    from app.main import create_app
-
-    access_profiles = FakeAccessProfilesCollection()
-    logs = FakeLogsCollection()
-    repository = AccessProfileRepository(collection=access_profiles)
-
-    async def fake_forward(request, base_url, path):
-        assert path == "products"
-        return 200, [{"id": "p-seeded"}]
-
-    seeded_app = create_app(
-        access_profile_repository=repository,
-        logs_collection=logs,
-        request_forwarder=fake_forward,
-    )
-
+async def test_startup_seeding_drives_authorization_from_persisted_profiles_without_repository_monkeypatch():
+    seeded_app, access_profiles = _build_seeded_dispatcher_app()
     token = _token_for_subject("integration-user")
 
     with TestClient(seeded_app) as client:
