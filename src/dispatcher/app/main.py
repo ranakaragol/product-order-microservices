@@ -26,6 +26,11 @@ LOG_INSERT_TIMEOUT_SECONDS = float(os.getenv("DISPATCHER_LOG_INSERT_TIMEOUT_SECO
 def _service_unavailable_response() -> JSONResponse:
     return JSONResponse(status_code=503, content={"error": "Service Unavailable"})
 
+
+def _is_upstream_failure(exc: Exception) -> bool:
+    return isinstance(exc, httpx.RequestError)
+
+
 def _build_auth_upstream_url(path: str) -> str:
     return f"{AUTH_SERVICE_URL.rstrip('/')}/{path.lstrip('/')}"
 
@@ -134,6 +139,8 @@ async def _proxy_resource_request(request: Request, base_url: str, path: str):
         request_forwarder = getattr(request.app.state, "request_forwarder", forward_request)
         status, payload = await request_forwarder(request, base_url, path)
         return _build_proxy_response(status, payload)
+    except httpx.RequestError:
+        return _service_unavailable_response()
     except Exception:
         return _service_unavailable_response()
 
@@ -157,6 +164,8 @@ async def proxy_auth(path: str, request: Request):
     try:
         status_code, payload = await forward_auth_request(request, path) 
         return JSONResponse(status_code=status_code, content=payload)
+    except httpx.RequestError:
+        return _service_unavailable_response()
     except Exception:
         return _service_unavailable_response()
     
