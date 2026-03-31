@@ -11,6 +11,7 @@ from app.main import app
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 SECRET_KEY = "yazlab-secret-key"
+DEFAULT_AUTHENTICATED_SUBJECT = "default-authenticated"
 
 
 def _valid_token() -> str:
@@ -30,7 +31,7 @@ class FakeAccessProfileRepository:
         if profile is not None:
             return profile
 
-        return self._profiles_by_subject.get("default-authenticated")
+        return self._profiles_by_subject.get(DEFAULT_AUTHENTICATED_SUBJECT)
 
 
 class FakeLogsCollection:
@@ -238,8 +239,8 @@ async def test_real_auth_chain_allows_read_only_user_to_get_products(monkeypatch
     _install_access_profiles(
         monkeypatch,
         profiles_by_subject={
-            "default-authenticated": {
-                "subject": "default-authenticated",
+            DEFAULT_AUTHENTICATED_SUBJECT: {
+                "subject": DEFAULT_AUTHENTICATED_SUBJECT,
                 "permissions": [{"resource": "/products", "methods": ["GET"]}],
             }
         },
