@@ -288,6 +288,7 @@ async def test_real_auth_chain_forbids_read_only_user_product_create(monkeypatch
             }
         },
     )
+    _install_real_auth_service_harness(monkeypatch)
 
     async def fake_forward(request, base_url, path):
         raise AssertionError("Forbidden write request must not be forwarded")
