@@ -274,9 +274,9 @@ async def test_auth_proxy_passthroughs_upstream_status_and_body(monkeypatch):
     assert response.json() == {"detail": "invalid credentials"}
 
 @pytest.mark.asyncio(loop_scope="function")
-async def test_auth_proxy_returns_503_when_upstream_unreachable(monkeypatch):
+async def test_auth_proxy_returns_503_when_httpx_upstream_is_unreachable(monkeypatch):
     async def fake_forward_auth_request(request, path):
-        raise RuntimeError("Service down")
+        raise httpx.ConnectError("Service down")
 
     import app.main as dispatcher_mod
     monkeypatch.setattr(dispatcher_mod, "forward_auth_request", fake_forward_auth_request)
