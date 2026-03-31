@@ -276,6 +276,47 @@ async def test_real_auth_chain_allows_read_only_user_to_get_products(monkeypatch
     assert products_response.status_code == 200
     assert products_response.json() == [{"id": "p-real-auth"}]
 
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_real_auth_chain_forbids_read_only_user_product_create(monkeypatch):
+    _install_access_profiles(
+        monkeypatch,
+        profiles_by_subject={
+            DEFAULT_AUTHENTICATED_SUBJECT: {
+                "subject": DEFAULT_AUTHENTICATED_SUBJECT,
+                "permissions": [{"resource": "/products", "methods": ["GET"]}],
+            }
+        },
+    )
+
+    async def fake_forward(request, base_url, path):
+        raise AssertionError("Forbidden write request must not be forwarded")
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        register_response = await ac.post(
+            "/auth/register",
+            json={"username": "real-auth-writer", "password": "writer-password"},
+        )
+        assert register_response.status_code == 200
+
+        login_response = await ac.post(
+            "/auth/login",
+            json={"username": "real-auth-writer", "password": "writer-password"},
+        )
+        assert login_response.status_code == 200
+
+        token = login_response.json()["token"]
+        create_response = await ac.post(
+            "/products",
+            json={"name": "Mouse", "description": None, "price": 10.0, "stock": 3},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert create_response.status_code == 403
+    assert create_response.json() == {"error": "Forbidden"}
+
 @pytest.mark.asyncio(loop_scope="function")
 async def test_products_route_is_forwarded(monkeypatch):
     async def fake_forward(request, base_url, path):
