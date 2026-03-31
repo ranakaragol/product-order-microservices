@@ -94,14 +94,7 @@ class AccessProfileRepository:
             return
 
         for profile in self._bootstrap_profiles.values():
-            subject = profile["subject"]
-            if await self._get_persisted_profile(subject):
-                continue
-
-            try:
-                await self._collection.insert_one(dict(profile))
-            except Exception:
-                continue
+            await self._persist_profile_if_missing(profile)
 
     async def get_profile_by_subject(self, subject: str | None) -> dict | None:
         if not subject:
@@ -132,3 +125,13 @@ class AccessProfileRepository:
             return None
 
         return _normalize_profile(document)
+
+    async def _persist_profile_if_missing(self, profile: dict) -> None:
+        subject = profile["subject"]
+        if await self._get_persisted_profile(subject):
+            return
+
+        try:
+            await self._collection.insert_one(dict(profile))
+        except Exception:
+            return
