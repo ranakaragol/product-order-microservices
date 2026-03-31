@@ -17,6 +17,26 @@ class FakeNoopCollection:
         return None
 
 
+class FakeAccessProfilesCollection:
+    def __init__(self, documents=None):
+        self._documents = {
+            document["subject"]: dict(document)
+            for document in (documents or [])
+        }
+
+    async def find_one(self, query):
+        document = self._documents.get(query.get("subject"))
+        return dict(document) if document is not None else None
+
+    async def insert_one(self, document):
+        self._documents[document["subject"]] = dict(document)
+        return {"acknowledged": True}
+
+    def get_document(self, subject: str) -> dict | None:
+        document = self._documents.get(subject)
+        return dict(document) if document is not None else None
+
+
 def _token_for_subject(subject: str) -> str:
     payload = {
         "sub": subject,
@@ -55,6 +75,38 @@ def _elevated_profile(subject: str) -> dict:
             },
         ],
     }
+
+
+async def test_seed_bootstrap_profiles_persists_missing_profiles_into_dispatcher_collection():
+    collection = FakeAccessProfilesCollection()
+    repository = AccessProfileRepository(
+        collection=collection,
+        bootstrap_profiles={
+            DEFAULT_AUTHENTICATED_SUBJECT: _default_authenticated_profile(),
+            "alice": _elevated_profile("alice"),
+        },
+    )
+
+    await repository.seed_bootstrap_profiles()
+
+    assert collection.get_document(DEFAULT_AUTHENTICATED_SUBJECT) == _default_authenticated_profile()
+    assert collection.get_document("alice") == _elevated_profile("alice")
+
+
+async def test_seed_bootstrap_profiles_keeps_persisted_subject_profile_as_source_of_truth():
+    persisted_profile = {
+        "subject": "alice",
+        "permissions": [{"resource": "/products", "methods": ["GET"]}],
+    }
+    collection = FakeAccessProfilesCollection(documents=[persisted_profile])
+    repository = AccessProfileRepository(
+        collection=collection,
+        bootstrap_profiles={"alice": _elevated_profile("alice")},
+    )
+
+    await repository.seed_bootstrap_profiles()
+
+    assert collection.get_document("alice") == persisted_profile
 
 
 async def test_repository_falls_back_to_default_authenticated_profile_for_real_username():
