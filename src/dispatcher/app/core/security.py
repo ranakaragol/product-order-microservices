@@ -26,6 +26,14 @@ def get_access_profile_repository() -> AccessProfileRepository:
     return _access_profile_repository
 
 
+def resolve_access_profile_repository(request: Request) -> AccessProfileRepository:
+    repository = getattr(request.app.state, "access_profile_repository", None)
+    if repository is not None:
+        return repository
+
+    return get_access_profile_repository()
+
+
 def _is_method_allowed(profile: dict | None, path: str, method: str) -> bool:
     if not profile:
         return False
@@ -64,7 +72,7 @@ async def evaluate_authorization(request: Request) -> int:
     if not claims:
         return 401
 
-    profile = await get_access_profile_repository().get_profile_by_subject(claims.get("sub"))
+    profile = await resolve_access_profile_repository(request).get_profile_by_subject(claims.get("sub"))
     if not _is_method_allowed(profile, request.url.path, request.method):
         return 403
 

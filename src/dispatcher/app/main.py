@@ -68,8 +68,9 @@ def _build_log_entry(request: Request, status_code: int) -> TrafficLog:
 async def _write_traffic_log(request: Request, status_code: int):
     try:
         log_entry = _build_log_entry(request, status_code)
+        target_logs_collection = getattr(request.app.state, "logs_collection", logs_collection)
         await asyncio.wait_for(
-            logs_collection.insert_one(log_entry.model_dump()),
+            target_logs_collection.insert_one(log_entry.model_dump()),
             timeout=LOG_INSERT_TIMEOUT_SECONDS,
         )
     except Exception as e:
@@ -81,17 +82,18 @@ async def _build_logged_error_response(request: Request, status_code: int, messa
     return JSONResponse(status_code=status_code, content={"error": message})
 
 
-async def seed_dispatcher_access_profiles() -> None:
-    await get_access_profile_repository().seed_bootstrap_profiles()
+async def seed_dispatcher_access_profiles(app: FastAPI | None = None) -> None:
+    repository = getattr(app.state, "access_profile_repository", None) if app is not None else None
+    if repository is None:
+        repository = get_access_profile_repository()
+
+    await repository.seed_bootstrap_profiles()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await seed_dispatcher_access_profiles()
+    await seed_dispatcher_access_profiles(app)
     yield
-
-
-app = FastAPI(lifespan=lifespan)
 
 
 async def forward_request(request:Request, base_url:str, path:str):
@@ -129,13 +131,13 @@ async def forward_auth_request(request: Request, path: str):
 
 async def _proxy_resource_request(request: Request, base_url: str, path: str):
     try:
-        status, payload = await forward_request(request, base_url, path)
+        request_forwarder = getattr(request.app.state, "request_forwarder", forward_request)
+        status, payload = await request_forwarder(request, base_url, path)
         return _build_proxy_response(status, payload)
     except Exception:
         return _service_unavailable_response()
 
 
-@app.middleware("http")
 async def check_auth(request: Request, call_next):
     
     status_code = await evaluate_authorization(request)
@@ -148,11 +150,9 @@ async def check_auth(request: Request, call_next):
     return response
 
 
-@app.get("/")
 def read_root():
     return {"message": "Dispatcher Gateway Running"}
 
-@app.api_route("/auth/{path:path}", methods=AUTH_PROXY_METHODS)
 async def proxy_auth(path: str, request: Request):
     try:
         status_code, payload = await forward_auth_request(request, path) 
@@ -161,7 +161,6 @@ async def proxy_auth(path: str, request: Request):
         return _service_unavailable_response()
     
 
-@app.api_route("/products/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_products(request: Request, path: str = ""):
     return await _proxy_resource_request(
         request,
@@ -170,7 +169,6 @@ async def proxy_products(request: Request, path: str = ""):
     )
 
 
-@app.api_route("/products", methods=["GET", "POST"])
 async def proxy_products_root(request: Request):
     return await _proxy_resource_request(request, PRODUCT_SERVICE_URL, "products")
 
@@ -180,7 +178,6 @@ async def proxy_products_root(request: Request):
 # async def proxy_orders(request: Request, path: str = ""):
 #     status, payload = await forward_request(request, ORDER_SERVICE_URL, path)
 #     return JSONResponse(status_code=status, content=payload)
-@app.api_route("/orders/{path:path}", methods=["GET", "POST", "PATCH", "DELETE"])
 async def proxy_orders(request: Request, path: str = ""):
     return await _proxy_resource_request(
         request,
@@ -188,6 +185,33 @@ async def proxy_orders(request: Request, path: str = ""):
         _build_service_path("orders", path),
     )
 
-@app.api_route("/orders", methods=["GET", "POST"])
 async def proxy_orders_root(request: Request):
     return await _proxy_resource_request(request, ORDER_SERVICE_URL, "orders")
+
+
+def create_app(
+    *,
+    access_profile_repository=None,
+    logs_collection=None,
+    request_forwarder=None,
+) -> FastAPI:
+    app = FastAPI(lifespan=lifespan)
+
+    if access_profile_repository is not None:
+        app.state.access_profile_repository = access_profile_repository
+    if logs_collection is not None:
+        app.state.logs_collection = logs_collection
+    if request_forwarder is not None:
+        app.state.request_forwarder = request_forwarder
+
+    app.middleware("http")(check_auth)
+    app.add_api_route("/", read_root, methods=["GET"])
+    app.add_api_route("/auth/{path:path}", proxy_auth, methods=AUTH_PROXY_METHODS)
+    app.add_api_route("/products/{path:path}", proxy_products, methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+    app.add_api_route("/products", proxy_products_root, methods=["GET", "POST"])
+    app.add_api_route("/orders/{path:path}", proxy_orders, methods=["GET", "POST", "PATCH", "DELETE"])
+    app.add_api_route("/orders", proxy_orders_root, methods=["GET", "POST"])
+    return app
+
+
+app = create_app()
