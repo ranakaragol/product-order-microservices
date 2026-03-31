@@ -4,7 +4,7 @@ import os
 import httpx
 from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
-from app.core.security import evaluate_authorization
+from app.core.security import evaluate_authorization, get_access_profile_repository
 from fastapi import Request
 from app.core.database import logs_collection
 from app.models.log import TrafficLog
@@ -81,6 +81,10 @@ async def _build_logged_error_response(request: Request, status_code: int, messa
     return JSONResponse(status_code=status_code, content={"error": message})
 
 
+async def seed_dispatcher_access_profiles() -> None:
+    await get_access_profile_repository().seed_bootstrap_profiles()
+
+
 async def forward_request(request:Request, base_url:str, path:str):
     # """Genel mikroservis yönlendirme fonksiyonu"""
     # url = f"{base_url.rstrip('/')}/{request.url.path.lstrip('/')}"
@@ -133,6 +137,11 @@ async def check_auth(request: Request, call_next):
     response= await call_next(request)
     await _write_traffic_log(request, response.status_code)
     return response
+
+
+@app.on_event("startup")
+async def startup_seed_dispatcher_access_profiles():
+    await seed_dispatcher_access_profiles()
 
 @app.get("/")
 def read_root():
