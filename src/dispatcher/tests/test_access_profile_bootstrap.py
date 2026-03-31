@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
+from fastapi.testclient import TestClient
 
 from app.main import app
 from app.repositories.access_profile_repository import AccessProfileRepository
@@ -35,6 +36,15 @@ class FakeAccessProfilesCollection:
     def get_document(self, subject: str) -> dict | None:
         document = self._documents.get(subject)
         return dict(document) if document is not None else None
+
+
+class FakeLogsCollection:
+    def __init__(self):
+        self.entries = []
+
+    async def insert_one(self, document):
+        self.entries.append(dict(document))
+        return {"acknowledged": True}
 
 
 def _token_for_subject(subject: str) -> str:
@@ -249,3 +259,30 @@ async def test_explicit_elevated_subject_can_create_product(monkeypatch):
 
     assert response.status_code == 201
     assert response.json() == {"id": "p-3", "name": "Mouse"}
+
+
+def test_startup_seeding_drives_authorization_from_persisted_profiles_without_repository_monkeypatch():
+    from app.main import create_app
+
+    access_profiles = FakeAccessProfilesCollection()
+    logs = FakeLogsCollection()
+    repository = AccessProfileRepository(collection=access_profiles)
+
+    async def fake_forward(request, base_url, path):
+        assert path == "products"
+        return 200, [{"id": "p-seeded"}]
+
+    seeded_app = create_app(
+        access_profile_repository=repository,
+        logs_collection=logs,
+        request_forwarder=fake_forward,
+    )
+
+    token = _token_for_subject("integration-user")
+
+    with TestClient(seeded_app) as client:
+        response = client.get("/products", headers={"Authorization": f"Bearer {token}"})
+
+    assert access_profiles.get_document(DEFAULT_AUTHENTICATED_SUBJECT) == _default_authenticated_profile()
+    assert response.status_code == 200
+    assert response.json() == [{"id": "p-seeded"}]
