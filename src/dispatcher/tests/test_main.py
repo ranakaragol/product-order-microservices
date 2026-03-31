@@ -289,6 +289,21 @@ async def test_auth_proxy_returns_503_when_httpx_upstream_is_unreachable(monkeyp
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_auth_proxy_returns_500_when_dispatcher_has_unexpected_internal_error(monkeypatch):
+    async def fake_forward_auth_request(request, path):
+        raise RuntimeError("dispatcher bug")
+
+    import app.main as dispatcher_mod
+    monkeypatch.setattr(dispatcher_mod, "forward_auth_request", fake_forward_auth_request)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/auth/login", json={"username": "u", "password": "p"})
+
+    assert response.status_code == 500
+    assert response.json() == {"error": "Internal Server Error"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_dispatcher_startup_seeds_access_profiles(monkeypatch):
     import app.main as dispatcher_mod
 
