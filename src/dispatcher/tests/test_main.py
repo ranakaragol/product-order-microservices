@@ -55,6 +55,14 @@ class FakeAuthUsersCollection:
         return {"inserted_id": document["username"]}
 
 
+class FakeSeedRepository:
+    def __init__(self):
+        self.seed_calls = 0
+
+    async def seed_bootstrap_profiles(self):
+        self.seed_calls += 1
+
+
 def _install_access_profiles(monkeypatch, profiles_by_subject=None):
     import app.core.security as security_mod
 
@@ -278,6 +286,18 @@ async def test_auth_proxy_returns_503_when_upstream_unreachable(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"error": "Service Unavailable"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_dispatcher_startup_seeds_access_profiles(monkeypatch):
+    import app.main as dispatcher_mod
+
+    fake_repository = FakeSeedRepository()
+    monkeypatch.setattr(dispatcher_mod, "get_access_profile_repository", lambda: fake_repository)
+
+    await dispatcher_mod.seed_dispatcher_access_profiles()
+
+    assert fake_repository.seed_calls == 1
 
 
 @pytest.mark.asyncio(loop_scope="function")
