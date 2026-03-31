@@ -1,13 +1,17 @@
 import pytest
 import httpx
+import importlib
+import sys
 from datetime import datetime, timedelta, timezone
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
 from fastapi import Request
+from pathlib import Path
 from app.main import app
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 SECRET_KEY = "yazlab-secret-key"
+DEFAULT_AUTHENTICATED_SUBJECT = "default-authenticated"
 
 
 def _valid_token() -> str:
@@ -23,7 +27,11 @@ class FakeAccessProfileRepository:
         self._profiles_by_subject = profiles_by_subject or {}
 
     async def get_profile_by_subject(self, subject: str):
-        return self._profiles_by_subject.get(subject)
+        profile = self._profiles_by_subject.get(subject)
+        if profile is not None:
+            return profile
+
+        return self._profiles_by_subject.get(DEFAULT_AUTHENTICATED_SUBJECT)
 
 
 class FakeLogsCollection:
@@ -33,6 +41,18 @@ class FakeLogsCollection:
     async def insert_one(self, document):
         self.entries.append(document)
         return {"acknowledged": True}
+
+
+class FakeAuthUsersCollection:
+    def __init__(self):
+        self._users = {}
+
+    async def find_one(self, query):
+        return self._users.get(query.get("username"))
+
+    async def insert_one(self, document):
+        self._users[document["username"]] = dict(document)
+        return {"inserted_id": document["username"]}
 
 
 def _install_access_profiles(monkeypatch, profiles_by_subject=None):
@@ -49,6 +69,86 @@ def _install_log_capture(monkeypatch):
     fake_logs = FakeLogsCollection()
     monkeypatch.setattr(dispatcher_mod, "logs_collection", fake_logs)
     return fake_logs
+
+
+def _load_auth_app_modules():
+    auth_service_root = Path(__file__).resolve().parents[2] / "auth_service"
+    dispatcher_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "app" or name.startswith("app.")
+    }
+
+    for module_name in list(dispatcher_modules):
+        sys.modules.pop(module_name, None)
+
+    sys.path.insert(0, str(auth_service_root))
+    try:
+        auth_main = importlib.import_module("app.main")
+        auth_router = importlib.import_module("app.routers.auth")
+        return auth_main.app, auth_router
+    finally:
+        sys.path.remove(str(auth_service_root))
+        for module_name in list(sys.modules):
+            if module_name == "app" or module_name.startswith("app."):
+                sys.modules.pop(module_name, None)
+        sys.modules.update(dispatcher_modules)
+
+
+def _install_real_auth_service_harness(monkeypatch):
+    auth_app, auth_router = _load_auth_app_modules()
+    fake_users = FakeAuthUsersCollection()
+    monkeypatch.setattr(auth_router, "users_collection", fake_users)
+
+    async def fake_forward_auth_request(request, path):
+        async with AsyncClient(
+            transport=ASGITransport(app=auth_app),
+            base_url="http://auth-service.test",
+        ) as auth_client:
+            upstream_response = await auth_client.request(
+                method=request.method,
+                url=f"/{path.lstrip('/')}",
+                params=request.query_params,
+                content=await request.body(),
+                headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
+            )
+
+        try:
+            payload = upstream_response.json()
+        except ValueError:
+            payload = upstream_response.text
+
+        return upstream_response.status_code, payload
+
+    monkeypatch.setattr("app.main.forward_auth_request", fake_forward_auth_request)
+    return fake_users
+
+
+def _install_default_read_only_profile(monkeypatch):
+    _install_access_profiles(
+        monkeypatch,
+        profiles_by_subject={
+            DEFAULT_AUTHENTICATED_SUBJECT: {
+                "subject": DEFAULT_AUTHENTICATED_SUBJECT,
+                "permissions": [{"resource": "/products", "methods": ["GET"]}],
+            }
+        },
+    )
+
+
+async def _register_and_login_through_dispatcher(ac: AsyncClient, username: str, password: str) -> str:
+    register_response = await ac.post(
+        "/auth/register",
+        json={"username": username, "password": password},
+    )
+    assert register_response.status_code == 200
+
+    login_response = await ac.post(
+        "/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert login_response.status_code == 200
+    return login_response.json()["token"]
 
 
 @pytest.mark.parametrize("path", ["/products", "/orders"])
@@ -159,6 +259,69 @@ async def test_auth_proxy_returns_503_when_upstream_unreachable(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"error": "Service Unavailable"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_real_auth_chain_allows_read_only_user_to_get_products(monkeypatch):
+    _install_default_read_only_profile(monkeypatch)
+    _install_real_auth_service_harness(monkeypatch)
+
+    async def fake_forward(request, base_url, path):
+        assert base_url.endswith("product_service:8000")
+        assert path == "products"
+        return 200, [{"id": "p-real-auth"}]
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        token = await _register_and_login_through_dispatcher(
+            ac,
+            username="real-auth-reader",
+            password="reader-password",
+        )
+        products_response = await ac.get(
+            "/products",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert products_response.status_code == 200
+    assert products_response.json() == [{"id": "p-real-auth"}]
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_real_auth_chain_forbids_read_only_user_product_create(monkeypatch):
+    _install_default_read_only_profile(monkeypatch)
+    _install_real_auth_service_harness(monkeypatch)
+
+    async def fake_forward(request, base_url, path):
+        raise AssertionError("Forbidden write request must not be forwarded")
+
+    monkeypatch.setattr("app.main.forward_request", fake_forward)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        token = await _register_and_login_through_dispatcher(
+            ac,
+            username="real-auth-writer",
+            password="writer-password",
+        )
+        create_response = await ac.post(
+            "/products",
+            json={"name": "Mouse", "description": None, "price": 10.0, "stock": 3},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert create_response.status_code == 403
+    assert create_response.json() == {"error": "Forbidden"}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_auth_verify_token_without_header_returns_401_via_real_auth_service(monkeypatch):
+    _install_real_auth_service_harness(monkeypatch)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/auth/verify-token")
+
+    assert response.status_code == 401
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_products_route_is_forwarded(monkeypatch):
