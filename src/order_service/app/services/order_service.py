@@ -1,4 +1,4 @@
-from app.repositories.order_repository import OrderRepository
+from app.services.repository_protocols import OrderRepositoryProtocol
 from app.models.order import Order
 
 
@@ -6,7 +6,7 @@ class OrderNotFoundError(Exception):
     pass
 
 class OrderService:
-    def __init__(self, repository: OrderRepository):
+    def __init__(self, repository: OrderRepositoryProtocol):
         self._repository = repository
 
     async def list_orders(self) -> list[Order]:

@@ -1,5 +1,5 @@
 from app.core.security import create_access_token, get_password_hash, verify_password, verify_token
-from app.repositories.user_repository import UserRepository
+from app.services.repository_protocols import UserRepositoryProtocol
 
 
 class UserAlreadyExistsError(Exception):
@@ -15,7 +15,7 @@ class InvalidTokenError(Exception):
 
 
 class AuthService:
-    def __init__(self, repository: UserRepository):
+    def __init__(self, repository: UserRepositoryProtocol):
         self._repository = repository
 
     async def register(self, username: str, password: str) -> dict:
