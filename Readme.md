@@ -39,6 +39,12 @@ Start the full system (runtime profile):
 docker compose -f src/docker-compose.yml up --build
 ```
 
+## Monitoring Workflow
+
+For Prometheus + Grafana startup, endpoint checks, validation queries, and provisioning verification, see:
+
+- `src/monitoring/README.md`
+
 ## Docker Test Workflow (Separated from Runtime)
 
 The compose file provides dedicated `test` profile services with dev dependencies installed.
