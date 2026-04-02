@@ -196,6 +196,23 @@ async def test_invalid_token_returns_401(path):
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("path", ["/productsx", "/ordersx"])
+async def test_non_resource_prefix_routes_are_not_protected_and_return_404(path):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get(path)
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/products", "/products/abc123", "/orders", "/orders/abc123"])
+async def test_real_resource_routes_remain_protected_without_token(path):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get(path)
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Unauthorized"}
+
+
 @pytest.mark.asyncio(loop_scope="function")
 async def test_valid_token_without_matching_access_profile_returns_403(monkeypatch):
     _install_access_profiles(monkeypatch, profiles_by_subject={})

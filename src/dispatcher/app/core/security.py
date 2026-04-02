@@ -18,8 +18,12 @@ def verify_token(token:str):
         return None
 
 
+def _matches_resource_root(path: str, resource: str) -> bool:
+    return path == resource or path.startswith(f"{resource}/")
+
+
 def _is_protected_path(path: str) -> bool:
-    return path.startswith(PROTECTED_PREFIXES)
+    return any(_matches_resource_root(path, prefix) for prefix in PROTECTED_PREFIXES)
 
 
 def get_access_profile_repository() -> AccessProfileRepository:
@@ -43,7 +47,7 @@ def _is_method_allowed(profile: dict | None, path: str, method: str) -> bool:
     for permission in permissions:
         resource = permission.get("resource")
         methods = permission.get("methods", [])
-        if resource and path.startswith(resource) and normalized_method in {item.upper() for item in methods}:
+        if resource and _matches_resource_root(path, resource) and normalized_method in {item.upper() for item in methods}:
             return True
 
     return False
