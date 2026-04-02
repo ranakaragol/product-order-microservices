@@ -98,6 +98,11 @@ def _record_request_metrics(request: Request, status_code: int, duration_seconds
     dispatcher_metrics.record(request, status_code, duration_seconds)
 
 
+def _finalize_metrics_recording(request: Request, response: Response, started_at: float) -> Response:
+    _record_request_metrics(request, response.status_code, perf_counter() - started_at)
+    return response
+
+
 async def seed_dispatcher_access_profiles(app: FastAPI | None = None) -> None:
     await _bootstrapper.seed_dispatcher_access_profiles(app)
 
@@ -127,17 +132,14 @@ async def check_auth(request: Request, call_next):
     status_code = await evaluate_authorization(request)
     if status_code == 401:
         response = await _build_logged_error_response(request, 401, "Unauthorized")
-        _record_request_metrics(request, response.status_code, perf_counter() - started_at)
-        return response
+        return _finalize_metrics_recording(request, response, started_at)
     if status_code == 403:
         response = await _build_logged_error_response(request, 403, "Forbidden")
-        _record_request_metrics(request, response.status_code, perf_counter() - started_at)
-        return response
+        return _finalize_metrics_recording(request, response, started_at)
 
     response= await call_next(request)
     await _write_traffic_log(request, response.status_code)
-    _record_request_metrics(request, response.status_code, perf_counter() - started_at)
-    return response
+    return _finalize_metrics_recording(request, response, started_at)
 
 
 def read_root():

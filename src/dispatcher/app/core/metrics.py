@@ -2,6 +2,7 @@ from fastapi import Request
 from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Counter, Histogram, generate_latest
 
 REQUEST_LATENCY_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+METRICS_ROUTE = "/metrics"
 
 
 class DispatcherMetrics:
@@ -26,7 +27,7 @@ class DispatcherMetrics:
 
     def record(self, request: Request, status_code: int, duration_seconds: float):
         route = self._resolve_route_label(request)
-        if route == "/metrics":
+        if route == METRICS_ROUTE:
             return
 
         method = request.method.upper()
