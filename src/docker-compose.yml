@@ -83,6 +83,42 @@ services:
       - product_service
       - order_service
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - internal_network
+    depends_on:
+      - dispatcher
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    networks:
+      - internal_network
+    depends_on:
+      - prometheus
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    profiles:
+      - monitoring
+
   auth_tests:
     build:
       context: ./auth_service
