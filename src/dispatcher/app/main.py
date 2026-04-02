@@ -1,11 +1,14 @@
 import os
+from time import perf_counter
 
 import httpx
 from fastapi import FastAPI
 from fastapi import Request
+from fastapi import Response
 from fastapi.responses import JSONResponse
 from app.bootstrap_helpers import DispatcherBootstrapper
 from app.core.security import evaluate_authorization, get_access_profile_repository
+from app.core.metrics import CONTENT_TYPE_LATEST, dispatcher_metrics
 from app.core.database import logs_collection
 from app.proxy_helpers import DispatcherProxyGateway
 from app.route_registration import register_gateway_routes
@@ -91,6 +94,10 @@ async def _build_logged_error_response(request: Request, status_code: int, messa
     )
 
 
+def _record_request_metrics(request: Request, status_code: int, duration_seconds: float) -> None:
+    dispatcher_metrics.record(request, status_code, duration_seconds)
+
+
 async def seed_dispatcher_access_profiles(app: FastAPI | None = None) -> None:
     await _bootstrapper.seed_dispatcher_access_profiles(app)
 
@@ -116,19 +123,32 @@ async def _proxy_resource_request(request: Request, base_url: str, path: str):
 
 
 async def check_auth(request: Request, call_next):
-    
+    started_at = perf_counter()
     status_code = await evaluate_authorization(request)
     if status_code == 401:
-        return await _build_logged_error_response(request, 401, "Unauthorized")
+        response = await _build_logged_error_response(request, 401, "Unauthorized")
+        _record_request_metrics(request, response.status_code, perf_counter() - started_at)
+        return response
     if status_code == 403:
-        return await _build_logged_error_response(request, 403, "Forbidden")
+        response = await _build_logged_error_response(request, 403, "Forbidden")
+        _record_request_metrics(request, response.status_code, perf_counter() - started_at)
+        return response
+
     response= await call_next(request)
     await _write_traffic_log(request, response.status_code)
+    _record_request_metrics(request, response.status_code, perf_counter() - started_at)
     return response
 
 
 def read_root():
     return {"message": "Dispatcher Gateway Running"}
+
+
+def metrics():
+    return Response(
+        content=dispatcher_metrics.render_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
 
 async def proxy_auth(path: str, request: Request):
     try:
@@ -187,6 +207,7 @@ def create_app(
     register_gateway_routes(
         app,
         read_root_handler=read_root,
+        metrics_handler=metrics,
         proxy_auth_handler=proxy_auth,
         proxy_products_handler=proxy_products,
         proxy_products_root_handler=proxy_products_root,

@@ -1,11 +1,20 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
 
+from app.core.metrics import dispatcher_metrics
 from app.main import create_app
 
 SECRET_KEY = "yazlab-secret-key"
+
+
+@pytest.fixture(autouse=True)
+def reset_dispatcher_metrics_registry():
+    dispatcher_metrics.reset()
+    yield
+    dispatcher_metrics.reset()
 
 
 class FakeAccessProfileRepository:
