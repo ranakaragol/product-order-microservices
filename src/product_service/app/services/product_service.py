@@ -1,4 +1,4 @@
-from app.repositories.product_repository import ProductRepository
+from app.services.repository_protocols import ProductRepositoryProtocol
 
 
 class ProductNotFoundError(Exception):
@@ -6,7 +6,7 @@ class ProductNotFoundError(Exception):
 
 
 class ProductService:
-    def __init__(self, repository: ProductRepository):
+    def __init__(self, repository: ProductRepositoryProtocol):
         self._repository = repository
 
     async def list_products(self):
