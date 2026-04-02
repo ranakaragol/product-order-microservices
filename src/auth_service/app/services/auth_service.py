@@ -41,7 +41,11 @@ class AuthService:
         if payload is None:
             raise InvalidTokenError()
 
-        return {"valid": True, "user": payload["sub"]}
+        subject = payload.get("sub")
+        if not subject:
+            raise InvalidTokenError()
+
+        return {"valid": True, "user": subject}
 
     @staticmethod
     def _extract_bearer_token(authorization: str | None) -> str:
