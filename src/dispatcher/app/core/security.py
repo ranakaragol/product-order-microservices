@@ -19,7 +19,7 @@ def verify_token(token:str):
 
 
 def _is_protected_path(path: str) -> bool:
-    return path.startswith(PROTECTED_PREFIXES)
+    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in PROTECTED_PREFIXES)
 
 
 def get_access_profile_repository() -> AccessProfileRepository:
