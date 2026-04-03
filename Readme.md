@@ -4,14 +4,11 @@
 Product-Order Microservices
 
 ## Ekip Üyeleri
-| Ad Soyad | Teknik Rol | Öğrenci No |
+| Ad Soyad | Öğrenci No |
 | --- | --- | --- |
-| Hüseyin Erekmen | Dispatcher, Monitoring, Entegrasyon | TODO: Buraya öğrenci numarası eklenecek |
-| Rana Karagöl | Auth/Product/Order servis geliştirme, test | TODO: Buraya öğrenci numarası eklenecek |
-| TODO: Buraya varsa ek ekip üyesi eklenecek | TODO: Rol bilgisi eklenecek | TODO: Buraya öğrenci numarası eklenecek |
+| Hüseyin Erekmen | 251307099 |
+| Rana Karagöl | 251307101 |
 
-## Tarih
-03 Nisan 2026
 
 ## İçindekiler
 1. [Giriş](#giriş)
@@ -45,8 +42,6 @@ Product-Order Microservices
 
 ## Giriş
 Bu çalışma, ders isterlerine uygun şekilde tasarlanan bir mikroservis mimarisi raporudur. Sistem, dış istemciler için tek giriş noktası olan bir dispatcher (gateway) üzerinden çalışır ve auth, product, order servislerini bu katman üzerinden erişilebilir hale getirir.
-
-Raporun amacı, mevcut repo durumunu teknik olarak doğru, savunulabilir ve dürüst biçimde belgelemektir. Bu nedenle mevcut kod tabanında doğrulanmayan hiçbir sonuç kesin gerçekleşmiş gibi yazılmamıştır.
 
 ## Problemin Tanımı
 Tek uygulama yaklaşımında kimlik doğrulama, ürün yönetimi, sipariş yönetimi ve yönlendirme sorumlulukları aynı kod tabanında birleştiğinde aşağıdaki problemler oluşur:
@@ -261,8 +256,6 @@ Bu proje RMM Seviye 2 beklentisini aşağıdaki şekilde karşılar:
 - Farklı işlevler farklı HTTP methodlarına bölünmüştür.
 - Method + status code kombinasyonları semantik farkları yansıtır.
 
-Not: HATEOAS (RMM Seviye 3) bu kapsamda hedeflenmemiştir.
-
 ## Servis Endpoint Özeti
 ### Dış sözleşme (dispatcher üzerinden)
 | Method | Endpoint | Açıklama |
@@ -281,3 +274,247 @@ Not: HATEOAS (RMM Seviye 3) bu kapsamda hedeflenmemiştir.
 | GET | `/orders/{id}` | Sipariş detayı |
 | PATCH | `/orders/{id}` | Sipariş kısmi güncelleme |
 | DELETE | `/orders/{id}` | Sipariş silme |
+
+### İç servis endpointleri (internal kullanım)
+| Servis | Endpointler |
+| --- | --- |
+| Auth Service | `POST /register`, `POST /login`, `GET /verify-token` |
+| Product Service | `GET/POST /products`, `GET/PUT/PATCH/DELETE /products/{id}` |
+| Order Service | `GET/POST /orders`, `GET/PATCH/DELETE /orders/{id}` |
+
+### Status code davranış özeti
+| Kod | Anlam | Tipik senaryo |
+| --- | --- | --- |
+| 200 | Başarılı işlem | Listeleme, detay, login |
+| 201 | Kaynak oluşturuldu | Ürün/sipariş oluşturma |
+| 204 | Gövdesiz başarılı silme | Silme işlemleri |
+| 401 | Kimlik doğrulama başarısız | Token yok/geçersiz |
+| 403 | Yetki yetersiz | Token geçerli ama izin yok |
+| 404 | Kaynak bulunamadı | Geçersiz id veya yanlış route |
+| 405 | Method desteklenmiyor | Kaynak için tanımsız method |
+| 409 | Çakışma | Aynı kullanıcı adıyla tekrar kayıt |
+| 422 | Doğrulama hatası | Şema/field doğrulama hatası |
+| 500 | İç hata | Beklenmeyen dispatcher iç hatası |
+| 503 | Servis erişilemiyor | Upstream bağlantı problemi |
+
+## Katmanlı Mimari Açıklaması
+Projede katmanlar servis bazında ayrılmıştır:
+
+- Router/Controller katmanı: HTTP endpoint tanımı ve hata kodu dönüşleri
+- Service katmanı: iş kuralları ve akış yönetimi
+- Repository katmanı: veritabanı erişimi
+- Schema katmanı: veri doğrulama sözleşmesi
+- Model katmanı: domain nesneleri
+- Core katmanı: güvenlik, metrik, veritabanı bağlantısı gibi ortak altyapı
+
+Bu ayrım, business logic'in route fonksiyonlarına gömülmesini engeller ve test edilebilirliği artırır.
+
+## Sınıf/Katman Yapısı
+```mermaid
+flowchart LR
+  subgraph dispatcher
+    DR[route_registration.py]
+    DM[check_auth middleware]
+    DG[DispatcherProxyGateway]
+    DS[core/security.py]
+    DRepo[AccessProfileRepository]
+    DLog[DispatcherTrafficLogger]
+    DMet[DispatcherMetrics]
+    DR --> DG
+    DM --> DS
+    DS --> DRepo
+    DM --> DLog
+    DM --> DMet
+  end
+
+  subgraph auth_service
+    AR[routers/auth.py]
+    AS[services/auth_service.py]
+    ARepo[repositories/user_repository.py]
+    ACore[core/security.py]
+    AR --> AS --> ARepo
+    AS --> ACore
+  end
+
+  subgraph product_service
+    PR[routers/products.py]
+    PS[services/product_service.py]
+    PRepo[repositories/product_repository.py]
+    PSchema[schemas/product.py]
+    PModel[models/product.py]
+    PR --> PS --> PRepo --> PModel
+    PR --> PSchema
+  end
+
+  subgraph order_service
+    OR[routers/orders.py]
+    OS[services/order_service.py]
+    ORepo[repositories/order_repository.py]
+    OSchema[schemas/order.py]
+    OModel[models/order.py]
+    OR --> OS --> ORepo --> OModel
+    OR --> OSchema
+  end
+```
+
+## İstek Akışları
+### Akış 1: Login
+1. İstemci dispatcher üzerinden `/auth/login` çağrısı yapar.
+2. Dispatcher isteği auth servisine iletir.
+3. Auth servis kimlik bilgilerini doğrular, token üretir.
+4. Dispatcher yanıtı istemciye döndürür.
+
+### Akış 2: Yetkili ürün okuma
+1. İstemci `Authorization: Bearer <token>` ile `/products` çağrısı yapar.
+2. Dispatcher token ve access profile kontrolü yapar.
+3. Yetki uygunsa product service'e iletir.
+4. Ürün listesi yanıtını istemciye döndürür.
+
+### Akış 3: Yetkisiz yazma isteği
+1. İstemci geçerli ama yazma izni olmayan token ile `POST /products` çağırır.
+2. Dispatcher erişim profilinde method iznini kontrol eder.
+3. İzin yoksa isteği aşağı servise iletmeden `403 Forbidden` döndürür.
+
+### Akış 4: Upstream servis kesintisi
+1. İstemci protected endpoint çağırır.
+2. Dispatcher yetki kontrolünden sonra ilgili servise iletmek ister.
+3. Upstream erişilemiyorsa `503 Service Unavailable` döndürülür.
+
+## Sequence Diagramlar
+### Sequence Diagram 1: Login ve token alma
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant D as Dispatcher
+  participant A as Auth Service
+
+  C->>D: POST /auth/login
+  D->>A: POST /login
+  A-->>D: 200 OK + JWT token
+  D-->>C: 200 OK + JWT token
+```
+
+### Sequence Diagram 2: Protected ürün yazma isteğinde yetki kontrolü
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant D as Dispatcher
+  participant P as Product Service
+  participant DB as dispatcher_mongo(access_profiles)
+
+  C->>D: POST /products (Bearer token)
+  D->>D: JWT decode
+  D->>DB: subject icin profil sorgula
+  alt Method izni var
+    D->>P: POST /products
+    P-->>D: 201 Created
+    D-->>C: 201 Created
+  else Method izni yok
+    D-->>C: 403 Forbidden
+  end
+```
+
+## Test Yaklaşımı
+Projede test yaklaşımı katmanlı ve davranış odaklıdır:
+
+- Servis testlerinde fake collection kullanılarak veritabanı bağımlılığı azaltılmıştır.
+- Dispatcher testlerinde authz, proxy forwarding, hata semantiği, logging ve metrics davranışları doğrulanmıştır.
+- Product ve Order servislerinde CRUD akışları ve 404/204 gibi durum kodları test edilmektedir.
+- Auth servisinde register/login/verify-token temel akışları test edilmektedir.
+
+Önemli dürüstlük notu:
+- Dispatcher tarafında belirgin bir TDD hikayesi commit geçmişinde açıkça izlenebilmektedir.
+- Tüm proje için aynı seviyede kesintisiz TDD uygulandığı iddia edilmemektedir.
+
+## Dispatcher Tarafında TDD Uygulaması
+Dispatcher geliştirmelerinde commit geçmişinde Red -> Green -> Refactor örüntüsü gözlenmektedir.
+
+Örnek TDD döngüleri:
+- Upstream `503` semantiği
+  - `7873d5e` test(dispatcher): red upstream failure returns 503
+  - `ce856a6` feat(dispatcher): green upstream failure returns 503
+  - `173c85a` refactor(dispatcher): polish upstream handling
+- Internal `500` semantiği
+  - `1741470` test(dispatcher): red internal dispatcher error returns 500
+  - `1c64eac` feat(dispatcher): green internal dispatcher error returns 500
+  - `e7e0b1b` refactor(dispatcher): polish internal error handling
+- Route guard doğrulaması
+  - `662d8b3` test(dispatcher): red exact protected route matching
+  - `35f93b9` feat(dispatcher): green exact protected route matching
+  - `f2c0d50` refactor(dispatcher): polish protected route matching
+- Prometheus metrikleri
+  - `254317d` test(dispatcher): red prometheus request metrics
+  - `91a0442` feat(dispatcher): green prometheus request metrics
+  - `3e87201` refactor(dispatcher): polish metrics instrumentation
+
+## Commit/TDD Kanıtı İçin Örnek Commit Akışı
+| Akış | Test (Red) | Uygulama (Green) | Refactor |
+| --- | --- | --- | --- |
+| Upstream hata yönetimi | `7873d5e` | `ce856a6` | `173c85a` |
+| Internal hata yönetimi | `1741470` | `1c64eac` | `e7e0b1b` |
+| Route guard doğruluğu | `662d8b3` | `35f93b9` | `f2c0d50` |
+| Dispatcher metrikleri | `254317d` | `91a0442` | `3e87201` |
+
+## Monitoring ve Görselleştirme
+Projede monitoring katmanı Prometheus + Grafana ile yapılandırılmıştır.
+
+### Prometheus'un rolü
+- Dispatcher'ın `/metrics` endpoint'ini scrape ederek metrik toplar.
+- Request sayacı ve latency histogram verilerini sorgulanabilir hale getirir.
+
+### Grafana dashboard'un rolü
+Provision edilen `Dispatcher Overview` dashboard'u aşağıdaki panelleri içerir:
+- `Requests (15m)`
+- `Status Codes (15m)`
+- `Request Latency P95`
+
+### Monitoring kanıt placeholder'ları
+- TODO: Buraya Grafana dashboard ekran görüntüsü eklenecek
+- TODO: Buraya Prometheus target health çıktısı eklenecek
+- TODO: Buraya Prometheus sorgu çıktıları eklenecek
+- TODO: Buraya dashboard yorumları eklenecek
+
+### Postman/manuel API kanıtı placeholder
+- TODO: Buraya Postman collection ekran görüntüsü eklenecek
+- TODO: Buraya örnek request/response ekran görüntüleri eklenecek
+
+## Yük Testi (Locust)
+Bu bölüm teslim öncesinde gerçek test çalıştırmalarıyla doldurulmak üzere hazırlanmıştır.
+
+### Test planı placeholder tablosu
+| Alan | İçerik |
+| --- | --- |
+| Test senaryosu açıklaması | TODO: Buraya test senaryosu açıklaması eklenecek |
+| Kullanıcı sayısı | TODO: Buraya kullanıcı sayısı eklenecek |
+| Spawn rate | TODO: Buraya spawn rate bilgisi eklenecek |
+| Test süresi | TODO: Buraya test süresi eklenecek |
+| Ortalama yanıt süresi | TODO: Buraya ortalama yanıt süresi eklenecek |
+| Hata oranı | TODO: Buraya hata oranı eklenecek |
+| Sonuç tablosu | TODO: Buraya Locust sonuç tablosu eklenecek |
+| Ekran görüntüsü | TODO: Buraya yük testi ekran görüntüsü eklenecek |
+| Yorum ve sonuç | TODO: Buraya yük testi yorum ve sonuç bölümü eklenecek |
+
+## Başarılar
+- Ders isterindeki minimum 4 bağımsız birim mimarisi sağlanmıştır.
+- Dispatcher business API için merkezi giriş noktası olarak konumlandırılmıştır.
+- Dispatcher/Auth/Product/Order için ayrı NoSQL persistence sınırları oluşturulmuştur.
+- Merkezi yetkilendirme kontrolü dispatcher katmanında uygulanmıştır.
+- Dispatcher için metrik üretimi ve dashboard altyapısı kurulmuştur.
+- Servislerde katmanlı yapı (router/service/repository/schema/model) belirgin hale getirilmiştir.
+
+## Sınırlılıklar
+- Monitoring ve yük testine ait görsel/ölçümsel nihai rapor kanıtları henüz eklenmemiştir.
+- TDD kanıtı dispatcher tarafında güçlüdür; tüm servislerde aynı düzeyde commit tabanlı TDD zinciri gösterilmemektedir.
+- Dispatcher route tanımları bazı path kombinasyonlarında aşağı servisten `405` dönebilecek şekilde geniş method kaydına sahiptir.
+- Tam kapsamlı uçtan uca entegrasyon senaryoları için ek test genişletme ihtiyacı devam etmektedir.
+
+## Olası Geliştirmeler
+- Auth doğrulama çağrılarını dispatcher içinde daha ileri policy katmanına dönüştürmek
+- Access profile yönetimi için admin endpointleri ve audit trail genişletmek
+- Order servisi için durum geçiş kurallarını (state machine yaklaşımı) detaylandırmak
+- Distributed tracing (request-id, correlation-id) ve merkezi log toplama entegrasyonu eklemek
+- Locust senaryolarını role-based trafik desenleriyle çeşitlendirmek
+- CI pipeline'da test + static analysis + container smoke test adımlarını zorunlu hale getirmek
+
+## Sonuç
+Bu proje, mikroservis sınırlarını ve gateway yaklaşımını ders isterleriyle uyumlu şekilde uygulayan bir backend iskeleti ortaya koymaktadır. Mevcut durumda dispatcher merkezli yönlendirme, authz kontrolü, servis bazlı persistence izolasyonu, gözlemlenebilirlik altyapısı ve test temelli geliştirme pratiği (özellikle dispatcher tarafında) somut biçimde mevcuttur.
