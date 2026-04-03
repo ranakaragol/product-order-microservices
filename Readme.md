@@ -5,40 +5,41 @@ Product-Order Microservices
 
 ## Ekip Üyeleri
 | Ad Soyad | Öğrenci No |
-| --- | --- | --- |
+| --- | --- |
 | Hüseyin Erekmen | 251307099 |
 | Rana Karagöl | 251307101 |
 
 
 ## İçindekiler
-1. [Giriş](#giriş)
-2. [Problemin Tanımı](#problemin-tanımı)
-3. [Projenin Amacı](#projenin-amacı)
-4. [Kullanılan Teknolojiler](#kullanılan-teknolojiler)
-5. [Sistem Mimarisi](#sistem-mimarisi)
-6. [Mikroservislerin Görevleri](#mikroservislerin-görevleri)
-7. [Dispatcher/Gateway Mantığı](#dispatchergateway-mantığı)
-8. [Kimlik Doğrulama ve Yetkilendirme Yapısı](#kimlik-doğrulama-ve-yetkilendirme-yapısı)
-9. [Veri Tabanı İzolasyonu](#veri-tabanı-izolasyonu)
-10. [Network Isolation](#network-isolation)
-11. [Docker ve Orkestrasyon Yapısı](#docker-ve-orkestrasyon-yapısı)
-12. [API Tasarımı](#api-tasarımı)
-13. [RESTful Yaklaşım](#restful-yaklaşım)
-14. [Richardson Maturity Model Seviye 2](#richardson-maturity-model-seviye-2)
-15. [Servis Endpoint Özeti](#servis-endpoint-özeti)
-16. [Katmanlı Mimari Açıklaması](#katmanlı-mimari-açıklaması)
-17. [Sınıf/Katman Yapısı](#sınıfkatman-yapısı)
-18. [İstek Akışları](#istek-akışları)
-19. [Sequence Diagramlar](#sequence-diagramlar)
-20. [Test Yaklaşımı](#test-yaklaşımı)
-21. [Dispatcher Tarafında TDD Uygulaması](#dispatcher-tarafında-tdd-uygulaması)
-22. [Commit/TDD Kanıtı İçin Örnek Commit Akışı](#committdd-kanıtı-için-örnek-commit-akışı)
-23. [Monitoring ve Görselleştirme](#monitoring-ve-görselleştirme)
-24. [Yük Testi (Locust)](#yük-testi-locust)
-25. [Başarılar](#başarılar)
-26. [Sınırlılıklar](#sınırlılıklar)
-27. [Olası Geliştirmeler](#olası-geliştirmeler)
-28. [Sonuç](#sonuç)
+
+1. Giriş  
+2. Problemin Tanımı  
+3. Projenin Amacı  
+4. Kullanılan Teknolojiler
+5. Sistem Mimarisi  
+6. Mikroservislerin Görevleri  
+7. Dispatcher / Gateway Mantığı
+8. Kimlik Doğrulama ve Yetkilendirme Yapısı
+9. Veri Tabanı İzolasyonu  
+10. Network Isolation  
+11. Docker ve Orkestrasyon Yapısı
+12. API Tasarımı  
+13. RESTful Yaklaşım  
+14. Richardson Maturity Model Seviye 2  
+15. Servis Endpoint Özeti
+16. Katmanlı Mimari Açıklaması  
+17. Sınıf / Katman Yapısı
+18. İstek Akışları  
+19. Sequence Diagramlar
+20. Test Yaklaşımı  
+21. Dispatcher Tarafında TDD Uygulaması  
+22. Commit / TDD Kanıtı İçin Örnek Commit Akışı
+23. Monitoring ve Görselleştirme  
+24. Yük Testi (Locust)
+25. Başarılar  
+26. Sınırlılıklar  
+27. Olası Geliştirmeler  
+28. Sonuç  
 
 ## Giriş
 Bu çalışma, ders isterlerine uygun şekilde tasarlanan bir mikroservis mimarisi raporudur. Sistem, dış istemciler için tek giriş noktası olan bir dispatcher (gateway) üzerinden çalışır ve auth, product, order servislerini bu katman üzerinden erişilebilir hale getirir.
