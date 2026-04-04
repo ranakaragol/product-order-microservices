@@ -472,9 +472,9 @@ Provision edilen `Dispatcher Overview` dashboard'u aşağıdaki panelleri içeri
 - `Request Latency P95`
 
 ### Monitoring kanıt placeholder'ları
-- TODO: Buraya Grafana dashboard ekran görüntüsü eklenecek
-- TODO: Buraya Prometheus target health çıktısı eklenecek
-- TODO: Buraya Prometheus sorgu çıktıları eklenecek
+- `assets/monitoring/grafana-dispatcher-overview.png`
+- `assets/monitoring/prometheus-targets-health.png`
+- `assets/monitoring/prometheus-status-codes-query.png` 
 - TODO: Buraya dashboard yorumları eklenecek
 
 ### Postman/manuel API kanıtı placeholder
