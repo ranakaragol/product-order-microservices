@@ -209,6 +209,8 @@ Bu nedenle iç servisler doğrudan public endpoint gibi tasarlanmamış, gateway
 docker compose -f src/docker-compose.yml up --build
 ```
 
+- `assets/manual_tests/docker-compose-services-status.png`: `docker compose ps` veya ayağa kalkan servislerin durumunu gösteren kanıt görseli olarak bu bölümün hemen altına eklenmeli.
+
 ### Monitoring profilini başlatma
 ```bash
 docker compose -f src/docker-compose.yml --profile monitoring up -d prometheus grafana
