@@ -209,7 +209,9 @@ Bu nedenle iç servisler doğrudan public endpoint gibi tasarlanmamış, gateway
 docker compose -f src/docker-compose.yml up --build
 ```
 
-- `assets/manual_tests/docker-compose-services-status.png`: `docker compose ps` veya ayağa kalkan servislerin durumunu gösteren kanıt görseli olarak bu bölümün hemen altına eklenmeli.
+Çalışan servislerin Docker Compose üzerindeki durumu aşağıdaki ekran görüntüsünde gösterilmektedir.
+
+![Docker Compose servis durumu](assets/manual_tests/docker-compose-services-status.png)
 
 ### Monitoring profilini başlatma
 ```bash
@@ -472,14 +474,39 @@ Provision edilen `Dispatcher Overview` dashboard'u aşağıdaki panelleri içeri
 - `Request Latency P95`
 
 ### Monitoring kanıt placeholder'ları
-- `assets/monitoring/grafana-dispatcher-overview.png`
-- `assets/monitoring/prometheus-targets-health.png`
-- `assets/monitoring/prometheus-status-codes-query.png` 
-- TODO: Buraya dashboard yorumları eklenecek
+Grafana ve Prometheus üzerinden elde edilen monitoring kanıtları aşağıda verilmiştir.
+
+#### Grafana dashboard görünümü
+![Grafana dispatcher overview](assets/monitoring/grafana-dispatcher-overview.png)
+
+#### Prometheus target health
+![Prometheus targets health](assets/monitoring/prometheus-targets-health.png)
+
+#### Prometheus status code sorgusu
+![Prometheus status codes query](assets/monitoring/prometheus-status-codes-query.png)
+
+#### Dashboard yorumları
+- Grafana dashboard'u istek hacmi, durum kodları ve gecikme metriklerini tek ekranda göstermektedir.
+- Prometheus target ekranı dispatcher `/metrics` endpoint'inin başarıyla scrape edildiğini doğrulamaktadır.
+- Status code sorgu ekranı, uygulama davranışının metriklere yansıdığını göstermektedir.
 
 ### Postman/manuel API kanıtı placeholder
 - TODO: Buraya Postman collection ekran görüntüsü eklenecek
-- TODO: Buraya örnek request/response ekran görüntüleri eklenecek
+
+#### Login isteği
+![Auth login response](assets/manual_tests/auth-login-response.png)
+
+#### Başarılı silme işlemi (`204 No Content`)
+![Delete response 204 no content](assets/manual_tests/delete-response-204-no-content.png)
+
+#### Yetkisiz istek (`401 Unauthorized`)
+![Unauthorized response 401](assets/manual_tests/unauthorized-response-401.png)
+
+#### Yetki yetersiz istek (`403 Forbidden`)
+![Forbidden response 403](assets/manual_tests/forbidden-response-403.png)
+
+#### Kaynak bulunamadı (`404 Not Found`)
+![Not found response 404](assets/manual_tests/not-found-response-404.png)
 
 ## Yük Testi (Locust)
 Bu bölüm teslim öncesinde gerçek test çalıştırmalarıyla doldurulmak üzere hazırlanmıştır.
