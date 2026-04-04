@@ -61,6 +61,8 @@ def _build_test_app():
     async def fake_forward(request, base_url, path):
         if path == "products":
             return 200, [{"id": "p-metrics"}]
+        if path.startswith("products/") and request.method == "DELETE":
+            return 204, None
         return 404, {"detail": "not found"}
 
     return create_app(
@@ -117,3 +119,18 @@ def test_metrics_endpoint_does_not_count_itself_as_application_traffic_noise():
     assert first_metrics.status_code == 200
     assert second_metrics.status_code == 200
     assert 'route="/metrics"' not in second_metrics.text
+
+
+def test_dynamic_delete_routes_are_aggregated_under_route_pattern_for_204_counts():
+    app = _build_test_app()
+    headers = {"Authorization": f"Bearer {_token()}"}
+
+    with TestClient(app) as client:
+        first_delete = client.delete("/products/a1", headers=headers)
+        second_delete = client.delete("/products/b2", headers=headers)
+        metrics_response = client.get("/metrics")
+
+    assert first_delete.status_code == 204
+    assert second_delete.status_code == 204
+    assert metrics_response.status_code == 200
+    assert 'dispatcher_http_requests_total{method="DELETE",route="/products/{path:path}",status_code="204"} 2.0' in metrics_response.text
