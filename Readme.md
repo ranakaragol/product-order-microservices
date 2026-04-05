@@ -334,51 +334,137 @@ Projede katmanlar servis bazında ayrılmıştır:
 Bu ayrım, business logic'in route fonksiyonlarına gömülmesini engeller ve test edilebilirliği artırır.
 
 ## Sınıf/Katman Yapısı
+Aşağıdaki UML sınıf diyagramı, projedeki gerçek sınıfları ve protocol/tabanlı bağımlılıkları özetlemektedir. Router katmanı FastAPI üzerinde fonksiyon tabanlı route handler'larla kurulduğu için bu diyagramda özellikle service, repository, model ve dispatcher yardımcı sınıfları gösterilmiştir.
+
 ```mermaid
-flowchart LR
-  subgraph dispatcher
-    DR[route_registration.py]
-    DM[check_auth middleware]
-    DG[DispatcherProxyGateway]
-    DS[core/security.py]
-    DRepo[AccessProfileRepository]
-    DLog[DispatcherTrafficLogger]
-    DMet[DispatcherMetrics]
-    DR --> DG
-    DM --> DS
-    DS --> DRepo
-    DM --> DLog
-    DM --> DMet
-  end
+classDiagram
+  class DispatcherBootstrapper {
+    +seed_dispatcher_access_profiles()
+    +build_lifespan()
+  }
 
-  subgraph auth_service
-    AR[routers/auth.py]
-    AS[services/auth_service.py]
-    ARepo[repositories/user_repository.py]
-    ACore[core/security.py]
-    AR --> AS --> ARepo
-    AS --> ACore
-  end
+  class AccessProfileRepository {
+    +seed_bootstrap_profiles()
+    +get_profile_by_subject()
+  }
 
-  subgraph product_service
-    PR[routers/products.py]
-    PS[services/product_service.py]
-    PRepo[repositories/product_repository.py]
-    PSchema[schemas/product.py]
-    PModel[models/product.py]
-    PR --> PS --> PRepo --> PModel
-    PR --> PSchema
-  end
+  class DispatcherProxyGateway {
+    +forward_request()
+    +forward_auth_request()
+    +proxy_resource_request()
+    +build_service_path()
+  }
 
-  subgraph order_service
-    OR[routers/orders.py]
-    OS[services/order_service.py]
-    ORepo[repositories/order_repository.py]
-    OSchema[schemas/order.py]
-    OModel[models/order.py]
-    OR --> OS --> ORepo --> OModel
-    OR --> OSchema
-  end
+  class DispatcherTrafficLogger {
+    +build_log_entry()
+    +dispatch_write()
+    +build_logged_error_response()
+  }
+
+  class DispatcherMetrics {
+    +record()
+    +render_latest()
+  }
+
+  class TrafficLog {
+    +timestamp
+    +method
+    +path
+    +service
+    +status_code
+    +client_ip
+  }
+
+  class UserRepositoryProtocol {
+    <<Protocol>>
+  }
+
+  class AuthService {
+    +register()
+    +login()
+    +verify_token_header()
+  }
+
+  class UserRepository {
+    +find_by_username()
+    +create_user()
+  }
+
+  class ProductRepositoryProtocol {
+    <<Protocol>>
+  }
+
+  class ProductService {
+    +list_products()
+    +get_product()
+    +create_product()
+    +replace_product()
+    +patch_product()
+    +delete_product()
+  }
+
+  class ProductRepository {
+    +list_products()
+    +get_by_id()
+    +create()
+    +replace()
+    +patch()
+    +delete()
+  }
+
+  class Product {
+    +id
+    +name
+    +description
+    +price
+    +stock
+  }
+
+  class OrderRepositoryProtocol {
+    <<Protocol>>
+  }
+
+  class OrderService {
+    +list_orders()
+    +create_order()
+    +get_order()
+    +patch_order()
+    +delete_order()
+    -_compute_total_amount()
+  }
+
+  class OrderRepository {
+    +list_orders()
+    +create_order()
+    +get_by_id()
+    +patch_order()
+    +delete_order()
+  }
+
+  class Order {
+    +id
+    +customer_id
+    +status
+    +total_amount
+  }
+
+  class OrderItem {
+    +product_id
+    +quantity
+    +unit_price
+  }
+
+  DispatcherBootstrapper --> AccessProfileRepository : bootstrap
+  DispatcherTrafficLogger --> TrafficLog : writes
+  UserRepository ..|> UserRepositoryProtocol
+  AuthService --> UserRepositoryProtocol : depends on
+  ProductRepository ..|> ProductRepositoryProtocol
+  ProductService --> ProductRepositoryProtocol : depends on
+  ProductRepository --> Product : maps to
+  OrderRepository ..|> OrderRepositoryProtocol
+  OrderService --> OrderRepositoryProtocol : depends on
+  OrderRepository --> Order : maps to
+  Order "1" *-- "*" OrderItem : contains
 ```
 
 ## İstek Akışları
