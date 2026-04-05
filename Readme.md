@@ -9,6 +9,9 @@ Product-Order Microservices
 | Hüseyin Erekmen | 251307099 |
 | Rana Karagöl | 251307101 |
 
+## Rapor Tarihi
+05 Nisan 2026
+
 
 ## İçindekiler
 
@@ -26,20 +29,22 @@ Product-Order Microservices
 12. API Tasarımı  
 13. RESTful Yaklaşım  
 14. Richardson Maturity Model Seviye 2  
-15. Servis Endpoint Özeti
-16. Katmanlı Mimari Açıklaması  
-17. Sınıf / Katman Yapısı
-18. İstek Akışları  
-19. Sequence Diagramlar
-20. Test Yaklaşımı  
-21. Dispatcher Tarafında TDD Uygulaması  
-22. Commit / TDD Kanıtı İçin Örnek Commit Akışı
-23. Monitoring ve Görselleştirme  
-24. Yük Testi (Locust)
-25. Başarılar  
-26. Sınırlılıklar  
-27. Olası Geliştirmeler  
-28. Sonuç  
+15. Literatür ve Karmaşıklık Notları
+16. Servis Endpoint Özeti
+17. Katmanlı Mimari Açıklaması  
+18. Sınıf / Katman Yapısı
+19. İstek Akışları  
+20. Sequence Diagramlar
+21. Test Yaklaşımı  
+22. Dispatcher Tarafında TDD Uygulaması  
+23. Commit / TDD Geçmişi İçin Örnek Commit Akışı
+24. Git Katkı Dağılımı
+25. Monitoring ve Görselleştirme  
+26. Yük Testi (Locust)
+27. Başarılar  
+28. Sınırlılıklar  
+29. Olası Geliştirmeler  
+30. Sonuç  
 
 ## Giriş
 Bu çalışma, ders isterlerine uygun şekilde tasarlanan bir mikroservis mimarisi raporudur. Sistem, dış istemciler için tek giriş noktası olan bir dispatcher (gateway) üzerinden çalışır ve auth, product, order servislerini bu katman üzerinden erişilebilir hale getirir.
@@ -62,7 +67,7 @@ Projenin ana amaçları aşağıdaki gibidir:
 - Dispatcher'ı sistemin tek business API giriş noktası olarak konumlandırmak
 - Her birimin kendi NoSQL persistence sınırına sahip olmasını sağlamak
 - RESTful ve RMM Seviye 2 uyumlu endpoint sözleşmeleri uygulamak
-- Dispatcher tarafında TDD kanıtını commit geçmişi ile savunulabilir hale getirmek
+- Dispatcher tarafında TDD uygulamasını commit geçmişi üzerinden izlenebilir hale getirmek
 - Monitoring (Prometheus + Grafana) ve yük testi (Locust) için raporlanabilir bir zemin hazırlamak
 
 ## Kullanılan Teknolojiler
@@ -85,9 +90,9 @@ Sistemin genel topolojisi aşağıdaki gibidir:
 
 ```mermaid
 flowchart LR
-  Client[Dis Istemci]
+  Client[Dış İstemci]
 
-  subgraph PublicAPI[Public API Katmani]
+  subgraph PublicAPI[Public API Katmanı]
     D[Dispatcher Gateway<br/>:8000]
   end
 
@@ -104,7 +109,7 @@ flowchart LR
 
   subgraph Observability[Monitoring Profili]
     PR[Prometheus<br/>:9090]
-    GR[Grafana<br/>:3000]
+    GR[Grafana<br/>host:4000]
   end
 
   Client -->|HTTP| D
@@ -199,13 +204,15 @@ Bu yapı, persistence boundary ilkesini korur ve servisler arası doğrudan veri
 - Auth/Product/Order servisleri host port publish etmez.
 - Mongo konteynerleri host port publish etmez.
 - Business API için dışa açılan tek kapı dispatcher'dır (`8000:8000`).
-- Monitoring profili açıldığında Prometheus (`9090`) ve Grafana (`3000`) gözlem amaçlı ayrıca publish edilir.
+- Monitoring profili açıldığında Prometheus (`9090`) ve Grafana (`4000 -> 3000`) gözlem amaçlı ayrıca publish edilir.
 
 Bu nedenle iç servisler doğrudan public endpoint gibi tasarlanmamış, gateway arkasında çalışacak şekilde konumlandırılmıştır.
 
 ## Docker ve Orkestrasyon Yapısı
+Aşağıdaki komutlar Windows PowerShell üzerinde, repo kök dizini `C:\Users\husoelrey\Documents\Projects\product-order-microservices` içinden çalıştırılmıştır.
+
 ### Runtime başlatma
-```bash
+```powershell
 docker compose -f src/docker-compose.yml up --build
 ```
 
@@ -214,24 +221,16 @@ docker compose -f src/docker-compose.yml up --build
 ![Docker Compose servis durumu](assets/manual_tests/docker-compose-services-status.png)
 
 ### Monitoring profilini başlatma
-```bash
+```powershell
 docker compose -f src/docker-compose.yml --profile monitoring up -d prometheus grafana
 ```
 
 ### Test profilini konteyner üzerinde çalıştırma
-```bash
+```powershell
 docker compose -f src/docker-compose.yml --profile test run --rm auth_tests
 docker compose -f src/docker-compose.yml --profile test run --rm dispatcher_tests
 docker compose -f src/docker-compose.yml --profile test run --rm product_tests
 docker compose -f src/docker-compose.yml --profile test run --rm order_tests
-```
-
-### Yerel servis testleri
-```bash
-cd src/auth_service && pytest tests
-cd src/dispatcher && pytest tests
-cd src/product_service && pytest tests
-cd src/order_service && pytest tests
 ```
 
 ## API Tasarımı
@@ -260,6 +259,26 @@ Bu proje RMM Seviye 2 beklentisini aşağıdaki şekilde karşılar:
 - Tek endpoint üstünden action taşıma yerine kaynak odaklı URI tasarımı vardır.
 - Farklı işlevler farklı HTTP methodlarına bölünmüştür.
 - Method + status code kombinasyonları semantik farkları yansıtır.
+
+## Literatür ve Karmaşıklık Notları
+### Literatür ve tasarım dayanakları
+Bu README'deki tasarım kararları ve kavramsal çerçeve aşağıdaki kaynaklara dayandırılmıştır:
+
+- Resmi ders isterleri: `YazLab.docx`
+- Resmi hoca açıklamaları: `proje_hakkinda_transkript.txt`
+- RMM, REST, Docker Compose, TDD ve mikroservis yaklaşımı için ders dokümanında ekler kısmında önerilen kaynaklar
+
+Bu projede resmi bağlayıcı referans ilk iki belgedir. Diğer kaynaklar, kullanılan mimari kararların kavramsal dayanağını ve terminolojisini netleştirmek için yardımcı literatür olarak kullanılmıştır.
+
+### Karmaşıklık notları
+Projede ağır algoritmik işlem yerine ağ yönlendirme, yetkilendirme ve CRUD akışları baskındır. Bu nedenle teorik karmaşıklık yorumları aşağıdaki şekilde özetlenebilir:
+
+- Dispatcher route eşlemesi sabit sayıda kaynak (`/auth`, `/products`, `/orders`) üzerinden çalıştığı için yönlendirme tarafı sabit zamanlıdır; pratik maliyetin ana kısmı upstream ağ gecikmesidir.
+- Yetkilendirme kontrolünde protected path kararı sabit prefix kümesine bakar; access profile içindeki izin taraması izin sayısı `p` için `O(p)` düzeyindedir. Mevcut projede `p` küçük ve sınırlıdır.
+- Sipariş toplam tutarı hesaplaması item listesi üzerinde tek geçişli toplama ile yapılır; item sayısı `n` için `O(n)` maliyetlidir.
+- Listeleme endpoint'lerinde uygulama tarafı maliyet, döndürülen kayıt sayısı `k` ile artar; gerçek darboğaz çoğunlukla veritabanı I/O ve ağ aktarımıdır.
+
+Bu teorik notlar, aşağıdaki load test ve monitoring çıktılarıyla birlikte okunmalıdır; projede performans değerlendirmesi yalnızca Big-O yorumu ile değil, ölçülen gecikme ve failure oranları ile de desteklenmiştir.
 
 ## Servis Endpoint Özeti
 ### Dış sözleşme (dispatcher üzerinden)
@@ -409,7 +428,7 @@ sequenceDiagram
 
   C->>D: POST /products (Bearer token)
   D->>D: JWT decode
-  D->>DB: subject icin profil sorgula
+    D->>DB: subject için profil sorgula
   alt Method izni var
     D->>P: POST /products
     P-->>D: 201 Created
@@ -427,9 +446,9 @@ Projede test yaklaşımı katmanlı ve davranış odaklıdır:
 - Product ve Order servislerinde CRUD akışları ve 404/204 gibi durum kodları test edilmektedir.
 - Auth servisinde register/login/verify-token temel akışları test edilmektedir.
 
-Önemli dürüstlük notu:
-- Dispatcher tarafında belirgin bir TDD hikayesi commit geçmişinde açıkça izlenebilmektedir.
-- Tüm proje için aynı seviyede kesintisiz TDD uygulandığı iddia edilmemektedir.
+Not:
+- Dispatcher tarafında belirgin bir TDD akışı commit geçmişinde izlenebilmektedir.
+- Tüm proje genelinde aynı yoğunlukta kesintisiz bir TDD zinciri bulunmamaktadır.
 
 ## Dispatcher Tarafında TDD Uygulaması
 Dispatcher geliştirmelerinde commit geçmişinde Red -> Green -> Refactor örüntüsü gözlenmektedir.
@@ -452,13 +471,23 @@ Dispatcher geliştirmelerinde commit geçmişinde Red -> Green -> Refactor örü
   - `91a0442` feat(dispatcher): green prometheus request metrics
   - `3e87201` refactor(dispatcher): polish metrics instrumentation
 
-## Commit/TDD Kanıtı İçin Örnek Commit Akışı
+## Commit / TDD Geçmişi İçin Örnek Commit Akışı
 | Akış | Test (Red) | Uygulama (Green) | Refactor |
 | --- | --- | --- | --- |
 | Upstream hata yönetimi | `7873d5e` | `ce856a6` | `173c85a` |
 | Internal hata yönetimi | `1741470` | `1c64eac` | `e7e0b1b` |
 | Route guard doğruluğu | `662d8b3` | `35f93b9` | `f2c0d50` |
 | Dispatcher metrikleri | `254317d` | `91a0442` | `3e87201` |
+
+## Git Katkı Dağılımı
+Bu raporda katkı dağılımı değerlendirmesi, aktif `HEAD` (`main`) geçmişi üzerinden alınmıştır.
+
+| Ekip üyesi | Commit sayısı | Yaklaşık oran |
+| --- | --- | --- |
+| Hüseyin Erekmen | 86 | %51 |
+| Rana Karagöl | 80 | %49 |
+
+Bu dağılım, iki ekip üyesinin de aktif ana geçmişte dengeli katkı verdiğini göstermektedir. Tüm branchler dahil edildiğinde toplam commit sayıları farklılaşabilse de, sunum ve rapor bağlamında esas alınan görünüm aktif teslim geçmişidir.
 
 ## Monitoring ve Görselleştirme
 Projede monitoring katmanı Prometheus + Grafana ile yapılandırılmıştır.
@@ -473,8 +502,8 @@ Provision edilen `Dispatcher Overview` dashboard'u aşağıdaki panelleri içeri
 - `Status Codes (15m)`
 - `Request Latency P95`
 
-### Monitoring kanıtları
-Grafana ve Prometheus üzerinden elde edilen monitoring kanıtları aşağıda verilmiştir.
+### Monitoring Çıktıları
+Grafana ve Prometheus üzerinden elde edilen izleme çıktıları aşağıda verilmiştir.
 
 #### Grafana dashboard görünümü
 ![Grafana dispatcher overview](assets/monitoring/grafana-dispatcher-overview.png)
@@ -488,9 +517,31 @@ Grafana ve Prometheus üzerinden elde edilen monitoring kanıtları aşağıda v
 #### Dashboard değerlendirmesi
 - Grafana dashboard'u istek hacmi, durum kodları ve gecikme metriklerini tek ekranda göstermektedir.
 - Prometheus target ekranı dispatcher `/metrics` endpoint'inin başarıyla scrape edildiğini doğrulamaktadır.
-- Prometheus status code sorguları, yük altında başarılı yanıtların baskın olduğunu ve metriklerin gözlemlenebilir biçimde toplandığını göstermektedir.
+- Prometheus status code sorguları, metrik akışının sağlıklı toplandığını ve farklı durum kodlarının gözlenebildiğini göstermektedir.
+- Bu sorgudaki değerler toplam sayaç (counter) olduğundan, tek başına ana performans benchmark metriği olarak değil destekleyici gözlem olarak yorumlanmıştır.
 
-### Postman/manuel API kanıtı
+### Dispatcher log tablosu
+Dispatcher üzerindeki trafik kayıtları, `dispatcher_db` içindeki `traffic_logs` koleksiyonunda tutulmaktadır. Aşağıdaki tablo görüntüsü, farklı istek türlerinin merkezi olarak izlenebildiğini göstermektedir.
+
+Tabloyu üretmek için kullanılan sorgu:
+
+```powershell
+docker exec dispatcher_mongo mongosh --% "mongodb://localhost:27017/dispatcher_db" --quiet --eval "console.table(db.traffic_logs.find({path: {$ne: '/metrics'}}, {_id:0, timestamp:1, method:1, path:1, service:1, status_code:1, client_ip:1}).sort({timestamp:-1}).limit(20).toArray())"
+```
+
+![Dispatcher log table](assets/monitoring/log_table_dispatcher.png)
+
+Tabloda görülen temel alanlar:
+- `timestamp`
+- `method`
+- `path`
+- `service`
+- `status_code`
+- `client_ip`
+
+Bu log görünümü içinde başarılı istekler (`200`, `201`) ile birlikte yetkisiz erişim (`401`), yetki yetersizliği (`403`), kaynak bulunamadı (`404`) ve upstream servis erişim problemi (`503`) aynı koleksiyonda gözlenebilmektedir. Bu görüntüde `/metrics` kayıtları özellikle filtrelenmiştir; böylece business API trafiği daha okunabilir hale getirilmiştir.
+
+### Postman / Manuel API Çıktıları
 
 #### Login isteği
 ![Auth login response](assets/manual_tests/auth-login-response.png)
@@ -508,19 +559,34 @@ Grafana ve Prometheus üzerinden elde edilen monitoring kanıtları aşağıda v
 ![Not found response 404](assets/manual_tests/not-found-response-404.png)
 
 ## Yük Testi (Locust)
-Locust ile dispatcher/gateway üzerine eşzamanlı trafik üretilmiş; test süresince Prometheus ve Grafana birlikte kullanılarak request hacmi, status code dağılımı ve latency davranışı izlenmiştir.
+Locust ile dispatcher/gateway üzerine eşzamanlı trafik üretilmiş; her senaryoda Locust istatistikleri, Grafana paneli ve Prometheus status code sorgusu birlikte kaydedilmiştir.
 
-### Metodoloji
-- Testler artımlı biçimde yürütülmüştür.
-- Her yük seviyesi ayrı bir çalışma olarak dokümante edilmiştir.
-- Her koşuda Locust istatistikleri, Grafana dashboard çıktısı ve Prometheus status code dağılımı birlikte kaydedilmiştir.
-- Amaç, ders projesi kapsamındaki sistem davranışını orta ve artan eşzamanlı yük altında değerlendirmektir; tam ölçekli üretim simülasyonu yapılmamıştır.
+### Locust çalıştırma komutları (PowerShell)
+Aşağıdaki komutlar repo kök dizininden çalıştırılmak üzere kullanılmıştır:
 
-### Test Karşılaştırma Tablosu
-| Test | Users | Spawn Rate | Total Requests | Failures | Failure Rate | Average Response | Median | P95 | RPS | Genel Değerlendirme |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 20 Kullanıcı | 20 | 2 kullanıcı/s | 2015 | 0 | %0 | 31.39 ms | 23 ms | 40 ms | 10.3 | Düşük-orta yükte sistem stabil, hata üretilmedi. |
-| 50 Kullanıcı | 50 | 5 kullanıcı/s | 10095 | 0 | %0 | 41.59 ms | 33 ms | 71 ms | 25.5 | Artan yükte throughput yükseldi, latency kontrollü arttı, erişilebilirlik korundu. |
+```powershell
+python -m locust -f .\load_tests\locustfile.py --host http://localhost:8000
+```
+
+Headless örnek benchmark komutu:
+
+```powershell
+python -m locust -f .\load_tests\locustfile.py --host http://localhost:8000 --headless --users 100 --spawn-rate 10 --run-time 3m
+```
+
+### Kısa Metodoloji
+- Testler artımlı olarak 20, 50, 100 ve 300 kullanıcı seviyelerinde çalıştırılmıştır.
+- Ana karşılaştırma benchmark seti 20/50/100 kullanıcı senaryolarıdır.
+- 300 kullanıcı seviyesi ayrı bir ek stres testi olarak değerlendirilmiştir.
+- Performans karşılaştırmasında Locust `Aggregated` satırı temel alınmıştır.
+- Prometheus status code sorguları toplam sayaç ürettiği için ana benchmark metriği olarak değil destekleyici gözlem verisi olarak kullanılmıştır.
+
+### Ana Karşılaştırma Tablosu (20 / 50 / 100)
+| Test | Users | Spawn Rate | Total Requests | Failures | Failure Rate | Average | Median | P95 | P99 | Current RPS | Değerlendirme |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20 Kullanıcı | 20 | 2 kullanıcı/s | 1842 | 0 | %0 | 15.38 ms | 13 ms | 24 ms | 110 ms | 9.2 | Stabil ve düşük gecikmeli başlangıç seviyesi. |
+| 50 Kullanıcı | 50 | 5 kullanıcı/s | 4604 | 0 | %0 | 15.54 ms | 12 ms | 24 ms | 140 ms | 26.8 | Throughput artarken sistem stabil kalıyor. |
+| 100 Kullanıcı | 100 | 10 kullanıcı/s | 9206 | 0 | %0 | 17.10 ms | 11 ms | 34 ms | 170 ms | 49.8 | Yük altında kararlı davranan güçlü seviye. |
 
 ### 20 Kullanıcılı Test
 Kurulum parametreleri:
@@ -535,36 +601,18 @@ Kurulum parametreleri:
 ![20 users grafana dashboard](assets/monitoring/load_tests/20_users/03-20-users-grafana-dashboard.png)
 ![20 users prometheus status codes](assets/monitoring/load_tests/20_users/04-20-users-prometheus-status-codes.png)
 
-Öne çıkan bulgular:
-- Toplam istek: 2015
-- Failures: 0
-- Failure rate: %0
-- Average response time: 31.39 ms
-- Median response time: 23 ms
-- P95 response time: 40 ms
-- Current RPS: 10.3
+Locust `Aggregated` bulguları:
+- Total requests: 1842
+- Failures: 0 (%0)
+- Average: 15.38 ms
+- Median: 13 ms
+- P95: 24 ms
+- P99: 110 ms
+- Current RPS: 9.2
 
-Endpoint düzeyi gözlemler:
-- `GET /orders` -> 788 istek, 0 failure, ort. 24.83 ms
-- `GET /products` -> 1101 istek, 0 failure, ort. 24.48 ms
-- `GET /products` (order seed) -> 43 istek, 0 failure, ort. 24.74 ms
-- `POST /auth/login` -> 20 istek, 0 failure, ort. 371.26 ms
-- `POST /auth/register` -> 20 istek, 0 failure, ort. 366.43 ms
-- `POST /orders` -> 43 istek, 0 failure, ort. 21.47 ms
-
-Prometheus status code dağılımı:
-- 200 -> 1968
-- 201 -> 43
-- 404 -> 1
-- 409 -> 4
-
-Grafana gözlemleri:
-- Test boyunca request hacmi düzenli biçimde artmıştır.
-- Status code dağılımı ağırlıklı olarak 200 ve 201 kodlarında kalmıştır.
-- P95 latency değeri yaklaşık 38-41 ms bandında izlenmiştir.
-- Çalışma boyunca sistem erişilebilir ve stabil kalmıştır.
-
-20 eşzamanlı kullanıcı ve 2 kullanıcı/saniye artış oranı ile yapılan yük testinde sistem toplam 2015 isteği hatasız şekilde işlemiştir. Ortalama yanıt süresi 31.39 ms, medyan 23 ms ve p95 gecikme değeri 40 ms civarında gözlenmiştir. GET tabanlı okuma işlemleri düşük gecikmeyle stabil çalışırken, kimlik doğrulama işlemleri diğer endpoint'lere göre daha yüksek yanıt süresi üretmiştir. Buna rağmen test boyunca hata oranı %0 olarak kalmış ve sistem genel olarak stabil davranmıştır.
+Endpoint gözlemleri:
+- Okuma endpoint'leri düşük gecikmede kalmıştır (`GET /products` ort. 12.36 ms, `GET /orders` ort. 15.65 ms).
+- Auth endpoint'leri daha yavaştır (`POST /auth/login` ort. 118.96 ms, `POST /auth/register` ort. 64.32 ms).
 
 ### 50 Kullanıcılı Test
 Kurulum parametreleri:
@@ -579,40 +627,81 @@ Kurulum parametreleri:
 ![50 users grafana dashboard](assets/monitoring/load_tests/50_users/03-50-users-grafana-dashboard.png)
 ![50 users prometheus status codes](assets/monitoring/load_tests/50_users/04-50-users-prometheus-status-codes.png)
 
-Öne çıkan bulgular:
-- Toplam istek: 10095
-- Failures: 0
-- Failure rate: %0
-- Average response time: 41.59 ms
-- Median response time: 33 ms
-- P95 response time: 71 ms
-- Current RPS: 25.5
+Locust `Aggregated` bulguları:
+- Total requests: 4604
+- Failures: 0 (%0)
+- Average: 15.54 ms
+- Median: 12 ms
+- P95: 24 ms
+- P99: 140 ms
+- Current RPS: 26.8
 
-Endpoint düzeyi gözlemler:
-- `GET /orders` -> 3949 istek, 0 failure, ort. 48.53 ms
-- `GET /products` -> 5468 istek, 0 failure, ort. 27.19 ms
-- `GET /products` (order seed) -> 289 istek, 0 failure, ort. 26.22 ms
-- `POST /auth/login` -> 50 istek, 0 failure, ort. 595.46 ms
-- `POST /auth/register` -> 50 istek, 0 failure, ort. 699.67 ms
-- `POST /orders` -> 289 istek, 0 failure, ort. 25.08 ms
+Endpoint gözlemleri:
+- Okuma endpoint'leri düşük gecikme bandını korumuştur (`GET /products` ort. 11.79 ms, `GET /orders` ort. 14.64 ms).
+- Auth endpoint'leri yine daha yavaştır (`POST /auth/login` ort. 141.31 ms, `POST /auth/register` ort. 127.42 ms).
 
-Prometheus status code dağılımı:
-- 200 -> 25642
-- 201 -> 723
-- 404 -> 1
-- 409 -> 80
-- 422 -> 4
+### 100 Kullanıcılı Test
+Kurulum parametreleri:
+- Users: 100
+- Spawn rate: 10 kullanıcı/saniye
+- Host: `http://host.docker.internal:8000`
 
-Grafana gözlemleri:
-- Toplam request hacmi belirgin biçimde artmıştır.
-- Status code dağılımı başarılı yanıtların baskın olduğu yapıyı korumuştur.
-- P95 latency, başlangıç düşüşünden sonra yaklaşık 60-70 ms bandında dengelenmiştir.
-- Sistem istek hatası üretmeden erişilebilir kalmıştır.
+İlgili ekran görüntüleri:
 
-50 eşzamanlı kullanıcı ve 5 kullanıcı/saniye artış oranı ile gerçekleştirilen yük testinde sistem toplam 10095 isteği hatasız şekilde işlemiştir. Test sonunda hata oranı %0 olarak gözlenmiştir. Ortalama yanıt süresi 41.59 ms, medyan 33 ms ve p95 gecikme değeri 71 ms olarak ölçülmüştür. Okuma ve sipariş oluşturma endpoint'leri stabil çalışırken, kimlik doğrulama işlemlerinde yanıt sürelerinin diğer endpoint'lere göre daha yüksek olduğu görülmüştür. Buna rağmen sistem genel olarak erişilebilirliğini korumuş ve yük altında stabil davranmıştır.
+![100 users locust config](assets/monitoring/load_tests/100_users/01-100-users-locust-config.png)
+![100 users locust statistics](assets/monitoring/load_tests/100_users/02-100-users-locust-statistics.png)
+![100 users grafana dashboard](assets/monitoring/load_tests/100_users/03-100-users-grafana-dashboard.png)
+![100 users prometheus status codes](assets/monitoring/load_tests/100_users/04-100-users-prometheus-status-codes.png)
 
-### 20 ve 50 Kullanıcı Testlerinin Karşılaştırılması
-20 kullanıcıdan 50 kullanıcıya çıkıldığında sistemin throughput kapasitesi artmış; toplam istek sayısı ve RPS değerleri belirgin biçimde yükselmiştir. Bu artışla birlikte latency değerlerinde beklenen ve kontrollü bir yükselme gözlenmiş, ancak failure rate her iki testte de %0 seviyesinde kalmıştır. Okuma (`GET /products`, `GET /orders`) ve sipariş oluşturma (`POST /orders`) akışları yük altında stabil kalırken, kimlik doğrulama işlemleri (`POST /auth/login`, `POST /auth/register`) göreli olarak daha yavaş davranmış ve iyileştirme için öncelikli alan olarak öne çıkmıştır.
+Locust `Aggregated` bulguları:
+- Total requests: 9206
+- Failures: 0 (%0)
+- Average: 17.10 ms
+- Median: 11 ms
+- P95: 34 ms
+- P99: 170 ms
+- Current RPS: 49.8
+
+Endpoint gözlemleri:
+- Okuma endpoint'leri stabil kalmıştır (`GET /products` ort. 12.50 ms, `GET /orders` ort. 15.24 ms).
+- Auth endpoint'leri bu seviyede de daha yavaştır (`POST /auth/login` ort. 159.21 ms, `POST /auth/register` ort. 189.72 ms).
+
+100 kullanıcı seviyesinde failure oranının %0 kalması ve P95/P99 değerlerinin kontrol altında seyretmesi, bu yük seviyesinde sistemin kararlı davrandığını göstermektedir.
+
+### 300 Kullanıcılı Ek Stres Testi
+Kurulum parametreleri:
+- Users: 300
+- Spawn rate: 20 kullanıcı/saniye
+- Host: `http://dispatcher:8000`
+
+İlgili ekran görüntüleri:
+
+![300 users locust config](assets/monitoring/load_tests/300_users/01-300-users-locust-config.png)
+![300 users locust statistics](assets/monitoring/load_tests/300_users/02-300-users-locust-statistics.png)
+![300 users grafana dashboard](assets/monitoring/load_tests/300_users/03-300-users-grafana-dashboard.png)
+![300 users prometheus status codes](assets/monitoring/load_tests/300_users/04-300-users-prometheus-status-codes.png)
+
+Locust `Aggregated` bulguları:
+- Total requests: 26215
+- Failures: 0 (%0)
+- Average: 90.82 ms
+- Median: 24 ms
+- P95: 400 ms
+- P99: 1100 ms
+- Current RPS: 118.2
+
+Endpoint gözlemleri:
+- Auth endpoint'leri belirgin şekilde yükselmiştir (`POST /auth/login` ort. 319.83 ms, `POST /auth/register` ort. 409.14 ms).
+- Okuma endpoint'lerinde de gecikme artışı gözlenmiştir (`GET /products` ort. 91.84 ms, `GET /orders` ort. 76.02 ms).
+
+Bu seviyede sistem hata üretmeden çalışmaya devam etmiştir; ancak latency belirgin şekilde yükselmiştir. Bu nedenle 300 kullanıcı senaryosu, ana benchmark karşılaştırmasından ayrı tutulmuş ve sistemin daha yüksek yük altındaki davranışını gözlemlemek için ek stres testi olarak kullanılmıştır.
+
+### Kısa Genel Değerlendirme
+- 20/50/100 kullanıcı testleri güçlü ve stabil bir davranış göstermiştir.
+- Ana benchmark setinde failure oranı %0 olarak korunmuştur.
+- Auth endpoint'leri tüm seviyelerde diğer endpoint'lere göre daha yüksek gecikme üretmektedir.
+- 100 kullanıcı seviyesi, bu proje için en güçlü ana yük testi seviyesi olarak öne çıkmaktadır.
+- 300 kullanıcı seviyesinde sistem çökmemiştir; fakat gecikme artışı belirgindir ve bu test dayanıklılık gözlemi olarak değerlendirilmelidir.
 
 ## Başarılar
 - Ders isterindeki minimum 4 bağımsız birim mimarisi sağlanmıştır.
@@ -621,14 +710,15 @@ Grafana gözlemleri:
 - Merkezi yetkilendirme kontrolü dispatcher katmanında uygulanmıştır.
 - Dispatcher için metrik üretimi ve dashboard altyapısı kurulmuştur.
 - Servislerde katmanlı yapı (router/service/repository/schema/model) belirgin hale getirilmiştir.
-- Locust ile farklı eşzamanlı kullanıcı seviyelerinde yük testi uygulanmıştır.
+- Locust ile 20/50/100 kullanıcı benchmark testleri ve 300 kullanıcı ek stres testi uygulanmıştır.
 - Prometheus ve Grafana üzerinden yük altındaki davranış gözlemlenmiş ve raporlanmıştır.
 
 ## Sınırlılıklar
-- Yük testleri 20 ve 50 kullanıcı seviyelerinde gerçekleştirilmiştir; daha yüksek eşzamanlılık seviyeleri bu raporda değerlendirilmemiştir.
+- Ana benchmark karşılaştırması 20/50/100 kullanıcı seviyelerine odaklanmıştır; 300 kullanıcı testi karşılaştırma tablosundan ayrı, ek stres testi amacıyla değerlendirilmiştir.
+- 300 kullanıcı seviyesinin üzerinde (ör. 500+) ek kırılma/kapasite testleri bu rapor kapsamında yapılmamıştır.
 - Authentication endpoint'lerinde diğer endpoint'lere göre daha yüksek gecikme gözlenmiştir.
 - Testler ders projesi kapsamındaki senaryolar için hazırlanmıştır; tam ölçekli üretim yükünü temsil etmemektedir.
-- TDD kanıtı dispatcher tarafında güçlüdür; tüm servislerde aynı düzeyde commit tabanlı TDD zinciri gösterilmemektedir.
+- Dispatcher tarafında TDD geçmişi daha belirgindir; tüm servislerde aynı düzeyde commit tabanlı TDD zinciri gösterilmemektedir.
 - Dispatcher route tanımları bazı path kombinasyonlarında aşağı servisten `405` dönebilecek şekilde geniş method kaydına sahiptir.
 - Tam kapsamlı uçtan uca entegrasyon senaryoları için ek test genişletme ihtiyacı devam etmektedir.
 
