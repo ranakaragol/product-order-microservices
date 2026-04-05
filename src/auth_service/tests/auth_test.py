@@ -59,6 +59,21 @@ async def test_login_with_wrong_password():
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_register_duplicate_username_returns_409():
+    payload = {
+        "username": "duplicate_user",
+        "password": "same-password",
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        first = await ac.post("/register", json=payload)
+        second = await ac.post("/register", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_verify_token_valid_flow():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         register = await ac.post("/register", json={

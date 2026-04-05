@@ -14,6 +14,7 @@ services:
       # Kendi izole veritabanına bağlanıyor
       - MONGO_URL=${AUTH_MONGO_URL:-mongodb://auth_mongo:27017/auth_db}
       - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+      - BCRYPT_ROUNDS=${AUTH_BCRYPT_ROUNDS:-10}
     networks:
       - internal_network
     depends_on:
@@ -127,6 +128,7 @@ services:
     environment:
       - MONGO_URL=${AUTH_MONGO_URL:-mongodb://auth_mongo:27017/auth_db}
       - SECRET_KEY=${SECRET_KEY:-yazlab-secret-key}
+      - BCRYPT_ROUNDS=${AUTH_BCRYPT_ROUNDS:-10}
       - PYTHONPATH=/workspace
     networks:
       - internal_network

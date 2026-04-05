@@ -3,7 +3,8 @@ import random
 from typing import Any
 from uuid import uuid4
 
-from locust import HttpUser, StopUser, between, task
+from locust import HttpUser, between, task
+from locust.exception import StopUser
 
 DEFAULT_PASSWORD = "locust-pass-123"
 
@@ -15,13 +16,16 @@ def _build_unique_username(prefix: str) -> str:
 class AuthenticatedGatewayUser(HttpUser):
     """Registers and logs in once per virtual user, then reuses JWT for protected calls."""
 
+    abstract = True
+
     wait_time = between(1, 3)
     host = os.getenv("LOCUST_HOST", "http://localhost:8000")
 
     username_prefix = "locust-user"
+    fixed_username: str | None = None
 
     def on_start(self) -> None:
-        self.username = _build_unique_username(self.username_prefix)
+        self.username = self.fixed_username or _build_unique_username(self.username_prefix)
         self.password = DEFAULT_PASSWORD
         self.token = None
 
@@ -136,6 +140,7 @@ class WriterUser(AuthenticatedGatewayUser):
 
     weight = 1
     username_prefix = "locust-wr"
+    fixed_username = "locust-writer"
 
     @task(5)
     def get_products(self) -> None:

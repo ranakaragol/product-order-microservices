@@ -1,4 +1,6 @@
 from app.core.security import create_access_token, get_password_hash, verify_password, verify_token
+from fastapi.concurrency import run_in_threadpool
+from pymongo.errors import DuplicateKeyError
 from app.services.repository_protocols import UserRepositoryProtocol
 
 
@@ -23,13 +25,26 @@ class AuthService:
         if existing_user:
             raise UserAlreadyExistsError()
 
-        hashed_password = get_password_hash(password)
-        await self._repository.create_user(username, hashed_password)
+        # bcrypt is CPU-expensive; run it off the event loop to reduce request queueing.
+        hashed_password = await run_in_threadpool(get_password_hash, password)
+        try:
+            await self._repository.create_user(username, hashed_password)
+        except DuplicateKeyError as exc:
+            # Parallel register requests can race after read-before-insert.
+            raise UserAlreadyExistsError() from exc
         return {"message": "Kullanıcı başarıyla oluşturuldu!"}
 
     async def login(self, username: str, password: str) -> dict:
         db_user = await self._repository.find_by_username(username)
-        if not db_user or not verify_password(password, db_user["password"]):
+        if not db_user:
+            raise InvalidCredentialsError()
+
+        password_matches = await run_in_threadpool(
+            verify_password,
+            password,
+            db_user["password"],
+        )
+        if not password_matches:
             raise InvalidCredentialsError()
 
         token = create_access_token(data={"sub": username})

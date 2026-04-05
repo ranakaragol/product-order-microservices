@@ -8,6 +8,22 @@ ALGORITHM="HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 #30 dakikalık bir süre tanımlıyoruz
 
+
+def _resolve_bcrypt_rounds() -> int:
+    raw = os.getenv("BCRYPT_ROUNDS", "12")
+    try:
+        rounds = int(raw)
+    except ValueError:
+        return 12
+
+    # bcrypt valid rounds range is 4..31; keep secure default if invalid.
+    if rounds < 4 or rounds > 31:
+        return 12
+    return rounds
+
+
+BCRYPT_ROUNDS = _resolve_bcrypt_rounds()
+
 def create_access_token(data: dict):
     to_encode=data.copy()
     expire=datetime.now(timezone.utc)+timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -20,7 +36,7 @@ def create_access_token(data: dict):
 #Şifre maskelenir
 def get_password_hash(password: str) -> str:
     pwd_bytes = password.encode('utf-8')
-    salt = bcrypt.gensalt()
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
