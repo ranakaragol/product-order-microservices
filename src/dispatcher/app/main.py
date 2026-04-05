@@ -1,5 +1,6 @@
 import os
 from time import perf_counter
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
@@ -78,7 +79,7 @@ def _build_log_entry(request: Request, status_code: int):
 
 
 async def _write_traffic_log(request: Request, status_code: int):
-    await _traffic_logger.write(
+    _traffic_logger.dispatch_write(
         request,
         status_code,
         fallback_logs_collection=logs_collection,
@@ -107,7 +108,15 @@ async def seed_dispatcher_access_profiles(app: FastAPI | None = None) -> None:
     await _bootstrapper.seed_dispatcher_access_profiles(app)
 
 
-lifespan = _bootstrapper.build_lifespan()
+_base_lifespan = _bootstrapper.build_lifespan()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with _base_lifespan(app):
+        yield
+    await _traffic_logger.drain()
+    await _proxy_gateway.close()
 
 
 async def forward_request(request:Request, base_url:str, path:str):

@@ -9,6 +9,7 @@ from app.models.log import TrafficLog
 class DispatcherTrafficLogger:
     def __init__(self, *, insert_timeout_seconds: float):
         self._insert_timeout_seconds = insert_timeout_seconds
+        self._pending_tasks: set[asyncio.Task] = set()
 
     @staticmethod
     def build_log_entry(request: Request, status_code: int) -> TrafficLog:
@@ -33,6 +34,29 @@ class DispatcherTrafficLogger:
         except Exception as exc:
             print(f"Logging error: {exc}")
 
+    def dispatch_write(self, request: Request, status_code: int, fallback_logs_collection) -> None:
+        async def _runner() -> None:
+            await self.write(request, status_code, fallback_logs_collection)
+
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(_runner())
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
+        except RuntimeError:
+            # No active event loop means nothing can be scheduled safely.
+            return
+
+    async def drain(self, *, timeout_seconds: float = 0.5) -> None:
+        if not self._pending_tasks:
+            return
+
+        pending = tuple(self._pending_tasks)
+        try:
+            await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=timeout_seconds)
+        except Exception:
+            return
+
     async def build_logged_error_response(
         self,
         request: Request,
@@ -40,5 +64,5 @@ class DispatcherTrafficLogger:
         message: str,
         fallback_logs_collection,
     ) -> JSONResponse:
-        await self.write(request, status_code, fallback_logs_collection)
+        self.dispatch_write(request, status_code, fallback_logs_collection)
         return JSONResponse(status_code=status_code, content={"error": message})

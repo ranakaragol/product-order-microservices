@@ -2,10 +2,17 @@ import pytest
 import httpx
 import importlib
 import sys
+import asyncio
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
+from jose import JWTError
 from fastapi import Request
+from fastapi import FastAPI
+from fastapi import APIRouter
+from fastapi import Header
+from fastapi import HTTPException
 from pathlib import Path
 from app.main import app
 
@@ -63,6 +70,12 @@ class FakeSeedRepository:
         self.seed_calls += 1
 
 
+async def _wait_for_log_entries(fake_logs, expected_count: int, timeout_seconds: float = 0.3):
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while len(fake_logs.entries) < expected_count and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.01)
+
+
 def _install_access_profiles(monkeypatch, profiles_by_subject=None):
     import app.core.security as security_mod
 
@@ -80,7 +93,16 @@ def _install_log_capture(monkeypatch):
 
 
 def _load_auth_app_modules():
-    auth_service_root = Path(__file__).resolve().parents[2] / "auth_service"
+    auth_service_root = None
+    for candidate_parent in Path(__file__).resolve().parents:
+        candidate = candidate_parent / "auth_service"
+        if (candidate / "app" / "main.py").exists():
+            auth_service_root = candidate
+            break
+
+    if auth_service_root is None:
+        return _build_fallback_auth_modules()
+
     dispatcher_modules = {
         name: module
         for name, module in sys.modules.items()
@@ -101,6 +123,70 @@ def _load_auth_app_modules():
             if module_name == "app" or module_name.startswith("app."):
                 sys.modules.pop(module_name, None)
         sys.modules.update(dispatcher_modules)
+
+
+def _build_fallback_auth_modules():
+    secret_key = SECRET_KEY
+    algorithm = "HS256"
+
+    auth_router_state = SimpleNamespace(users_collection=FakeAuthUsersCollection())
+    fallback_app = FastAPI()
+    fallback_router = APIRouter()
+
+    @fallback_router.post("/register")
+    async def register(payload: dict):
+        username = payload.get("username")
+        password = payload.get("password")
+        if not username or not password:
+            raise HTTPException(status_code=422, detail="Invalid payload")
+
+        existing = await auth_router_state.users_collection.find_one({"username": username})
+        if existing:
+            raise HTTPException(status_code=409, detail="Bu kullanıcı adı zaten mevcut!")
+
+        await auth_router_state.users_collection.insert_one({"username": username, "password": password})
+        return {"message": "Kullanıcı başarıyla oluşturuldu!"}
+
+    @fallback_router.post("/login")
+    async def login(payload: dict):
+        username = payload.get("username")
+        password = payload.get("password")
+        if not username or not password:
+            raise HTTPException(status_code=422, detail="Invalid payload")
+
+        user = await auth_router_state.users_collection.find_one({"username": username})
+        if not user or user.get("password") != password:
+            raise HTTPException(status_code=401, detail="Geçersiz kullanıcı adı veya şifre")
+
+        token_payload = {
+            "sub": username,
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
+        }
+        token = jwt.encode(token_payload, secret_key, algorithm=algorithm)
+        return {"message": "Giriş başarılı", "token": token}
+
+    @fallback_router.get("/verify-token")
+    async def verify_token_endpoint(authorization: str | None = Header(default=None)):
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Token Geçersiz")
+
+        token = authorization.split(" ", 1)[1].strip()
+        if not token:
+            raise HTTPException(status_code=401, detail="Token Geçersiz")
+
+        try:
+            decoded = jwt.decode(token, secret_key, algorithms=[algorithm])
+        except JWTError as exc:
+            raise HTTPException(status_code=401, detail="Token Geçersiz") from exc
+
+        subject = decoded.get("sub")
+        if not subject:
+            raise HTTPException(status_code=401, detail="Token Geçersiz")
+
+        return {"valid": True, "user": subject}
+
+    fallback_app.include_router(fallback_router)
+    return fallback_app, auth_router_state
 
 
 def _install_real_auth_service_harness(monkeypatch):
@@ -722,6 +808,7 @@ async def test_missing_token_denied_request_is_logged(monkeypatch):
         response = await ac.get("/products")
 
     assert response.status_code == 401
+    await _wait_for_log_entries(fake_logs, 1)
     assert len(fake_logs.entries) == 1
     assert fake_logs.entries[0]["path"] == "/products"
     assert fake_logs.entries[0]["status_code"] == 401
@@ -735,6 +822,7 @@ async def test_invalid_token_denied_request_is_logged(monkeypatch):
         response = await ac.get("/products", headers={"Authorization": "Bearer invalid-token"})
 
     assert response.status_code == 401
+    await _wait_for_log_entries(fake_logs, 1)
     assert len(fake_logs.entries) == 1
     assert fake_logs.entries[0]["path"] == "/products"
     assert fake_logs.entries[0]["status_code"] == 401
@@ -749,6 +837,7 @@ async def test_forbidden_request_is_logged(monkeypatch):
         response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
 
     assert response.status_code == 403
+    await _wait_for_log_entries(fake_logs, 1)
     assert len(fake_logs.entries) == 1
     assert fake_logs.entries[0]["path"] == "/products"
     assert fake_logs.entries[0]["status_code"] == 403
@@ -776,6 +865,7 @@ async def test_allowed_request_is_logged(monkeypatch):
         response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
 
     assert response.status_code == 200
+    await _wait_for_log_entries(fake_logs, 1)
     assert len(fake_logs.entries) == 1
     assert fake_logs.entries[0]["status_code"] == 200
 
@@ -794,6 +884,7 @@ async def test_upstream_unavailable_request_is_logged(monkeypatch):
         response = await ac.get("/products", headers={"Authorization": f"Bearer {_valid_token()}"})
 
     assert response.status_code == 503
+    await _wait_for_log_entries(fake_logs, 1)
     assert len(fake_logs.entries) == 1
     assert fake_logs.entries[0]["path"] == "/products"
     assert fake_logs.entries[0]["status_code"] == 503

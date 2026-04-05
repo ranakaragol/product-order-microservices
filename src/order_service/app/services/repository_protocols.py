@@ -4,7 +4,7 @@ from app.models.order import Order
 
 
 class OrderRepositoryProtocol(Protocol):
-    async def list_orders(self) -> list[Order]:
+    async def list_orders(self, *, skip: int = 0, limit: int = 100) -> list[Order]:
         ...
 
     async def create_order(self, data: dict) -> Order:

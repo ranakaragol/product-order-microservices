@@ -10,9 +10,9 @@ class OrderRepository:
     def _collection(self):
         return self._collection_provider()
     
-    async def list_orders(self)->list[Order]:
-        cursor=self._collection.find({})
-        documents=await cursor.to_list(length=1000)
+    async def list_orders(self, *, skip: int = 0, limit: int = 100)->list[Order]:
+        cursor = self._collection.find({}).skip(skip).limit(limit)
+        documents = await cursor.to_list(length=limit)
         return [Order.from_document(doc) for doc in documents]
     
     async def create_order(self, data:dict)->Order:

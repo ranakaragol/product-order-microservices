@@ -7,6 +7,13 @@ class DispatcherProxyGateway:
     def __init__(self, *, auth_service_url: str, request_timeout_seconds: float = 10.0):
         self._auth_service_url = auth_service_url
         self._request_timeout_seconds = request_timeout_seconds
+        self._client = httpx.AsyncClient(
+            timeout=self._request_timeout_seconds,
+            limits=httpx.Limits(max_connections=200, max_keepalive_connections=50),
+        )
+
+    async def close(self) -> None:
+        await self._client.aclose()
 
     @staticmethod
     def service_unavailable_response() -> JSONResponse:
@@ -54,30 +61,28 @@ class DispatcherProxyGateway:
 
     async def forward_request(self, request: Request, base_url: str, path: str):
         url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
-        async with httpx.AsyncClient(timeout=self._request_timeout_seconds) as client:
-            try:
-                upstream_response = await client.request(
-                    method=request.method,
-                    url=url,
-                    params=request.query_params,
-                    content=await request.body(),
-                    headers=self.filtered_forward_headers(request),
-                )
-                return upstream_response.status_code, self.parse_upstream_payload(upstream_response)
-            except httpx.RequestError as exc:
-                print(f"DEBUG: Error in forward -> {exc}")
-                return 503, {"error": "Service Unavailable"}
-
-    async def forward_auth_request(self, request: Request, path: str):
-        url = self.build_auth_upstream_url(path)
-        async with httpx.AsyncClient(timeout=self._request_timeout_seconds) as client:
-            upstream_response = await client.request(
+        try:
+            upstream_response = await self._client.request(
                 method=request.method,
                 url=url,
                 params=request.query_params,
                 content=await request.body(),
                 headers=self.filtered_forward_headers(request),
             )
+            return upstream_response.status_code, self.parse_upstream_payload(upstream_response)
+        except httpx.RequestError as exc:
+            print(f"DEBUG: Error in forward -> {exc}")
+            return 503, {"error": "Service Unavailable"}
+
+    async def forward_auth_request(self, request: Request, path: str):
+        url = self.build_auth_upstream_url(path)
+        upstream_response = await self._client.request(
+            method=request.method,
+            url=url,
+            params=request.query_params,
+            content=await request.body(),
+            headers=self.filtered_forward_headers(request),
+        )
 
         payload = self.parse_upstream_payload(upstream_response)
         return upstream_response.status_code, payload

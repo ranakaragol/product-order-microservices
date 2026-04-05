@@ -9,8 +9,8 @@ class OrderService:
     def __init__(self, repository: OrderRepositoryProtocol):
         self._repository = repository
 
-    async def list_orders(self) -> list[Order]:
-        return await self._repository.list_orders()
+    async def list_orders(self, *, skip: int = 0, limit: int = 100) -> list[Order]:
+        return await self._repository.list_orders(skip=skip, limit=limit)
 
     @staticmethod
     def _compute_total_amount(items: list[dict]) -> float:

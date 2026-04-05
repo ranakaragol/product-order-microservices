@@ -12,9 +12,23 @@ pytestmark = pytest.mark.asyncio(loop_scope="function")
 class FakeCursor:
     def __init__(self, docs):
         self._docs = docs
+        self._skip = 0
+        self._limit = None
+
+    def skip(self, amount):
+        self._skip = max(0, int(amount))
+        return self
+
+    def limit(self, amount):
+        self._limit = max(0, int(amount))
+        return self
 
     async def to_list(self, length):
-        return self._docs[:length]
+        start = self._skip
+        end = start + length
+        if self._limit is not None:
+            end = start + min(length, self._limit)
+        return self._docs[start:end]
 
 
 class FakeResult:
@@ -69,6 +83,26 @@ async def test_get_orders_returns_200_and_empty_list():
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+async def test_get_orders_supports_pagination_query_params(setup_fake_db):
+    for index in range(5):
+        payload = {
+            "customer_id": f"customer-{index}",
+            "items": [{"product_id": f"p{index}", "quantity": 1, "unit_price": 10.0 + index}],
+            "status": "pending",
+            "total_amount": 10.0 + index,
+        }
+        await setup_fake_db.insert_one(payload)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/orders?skip=1&limit=2")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+    assert body[0]["customer_id"] == "customer-1"
+    assert body[1]["customer_id"] == "customer-2"
 
 
 async def test_create_order_returns_201_and_computed_total_amount():

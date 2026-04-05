@@ -23,8 +23,14 @@ def _not_found_error() -> HTTPException:
     return HTTPException(status_code=404, detail="Order not found")
 
 @router.get("", response_model=list[OrderResponse])
-async def list_orders(service: ServiceDep):
-    return await service.list_orders()
+async def list_orders(
+    service: ServiceDep,
+    skip: int = 0,
+    limit: int = 100,
+):
+    safe_skip = max(skip, 0)
+    safe_limit = min(max(limit, 1), 200)
+    return await service.list_orders(skip=safe_skip, limit=safe_limit)
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def create_order(payload: OrderCreate, service: ServiceDep):
