@@ -1,98 +1,98 @@
 # Product-Order Microservices
 
-## Proje Adı
-Product-Order Microservices
+## Developers
 
-## Geliştiriciler
-| Ad Soyad | Rol |
+| Name | Role |
 | --- | --- |
-| Hüseyin Erekmen | Backend geliştirme, dispatcher, test ve gözlemlenebilirlik |
-| Rana Karagöl | Backend geliştirme, servis katmanları, veri modeli ve test |
+| Hüseyin Erekmen | Dispatcher, authorization, test infrastructure, monitoring, and load testing |
+| Rana Karagöl | Auth, Product, and Order services, data models, repository/service layers, and service tests |
 
-## Son Güncelleme
-05 Nisan 2026
+## Last Updated
 
+April 5, 2026
 
-## İçindekiler
+## Table of Contents
 
-1. Giriş  
-2. Problemin Tanımı  
-3. Projenin Amacı  
-4. Kullanılan Teknolojiler
-5. Sistem Mimarisi  
-6. Mikroservislerin Görevleri  
-7. Dispatcher / Gateway Mantığı
-8. Kimlik Doğrulama ve Yetkilendirme Yapısı
-9. Veri Tabanı İzolasyonu  
-10. Network Isolation  
-11. Docker ve Orkestrasyon Yapısı
-12. API Tasarımı  
-13. RESTful Yaklaşım  
-14. Richardson Maturity Model Seviye 2  
-15. Literatür ve Karmaşıklık Notları
-16. Servis Endpoint Özeti
-17. Katmanlı Mimari Açıklaması  
-18. Sınıf / Katman Yapısı
-19. İstek Akışları  
-20. Sequence Diagramlar
-21. Test Yaklaşımı  
-22. Dispatcher Tarafında TDD Uygulaması  
-23. Geliştirme Süreci Özeti
-24. Katkı Dağılımı
-25. Monitoring ve Görselleştirme  
-26. Yük Testi (Locust)
-27. Başarılar  
-28. Sınırlılıklar  
-29. Olası Geliştirmeler  
-30. Sonuç  
+1. [Overview](#overview)
+2. [Problem Statement](#problem-statement)
+3. [Goals](#goals)
+4. [Tech Stack](#tech-stack)
+5. [System Architecture](#system-architecture)
+6. [Service Responsibilities](#service-responsibilities)
+7. [Dispatcher / Gateway Logic](#dispatcher--gateway-logic)
+8. [Authentication and Authorization](#authentication-and-authorization)
+9. [Database Isolation](#database-isolation)
+10. [Network Isolation](#network-isolation)
+11. [Docker and Orchestration](#docker-and-orchestration)
+12. [API Design](#api-design)
+13. [Richardson Maturity Model Level 2](#richardson-maturity-model-level-2)
+14. [Complexity Notes](#complexity-notes)
+15. [Endpoint Summary](#endpoint-summary)
+16. [Layered Architecture](#layered-architecture)
+17. [Class Diagram](#class-diagram)
+18. [Request Flows](#request-flows)
+19. [Sequence Diagrams](#sequence-diagrams)
+20. [Testing Approach](#testing-approach)
+21. [TDD on the Dispatcher](#tdd-on-the-dispatcher)
+22. [Development Process Summary](#development-process-summary)
+23. [Contribution Breakdown](#contribution-breakdown)
+24. [Monitoring and Observability](#monitoring-and-observability)
+25. [Load Testing](#load-testing)
+26. [Achievements](#achievements)
+27. [Limitations](#limitations)
+28. [Future Improvements](#future-improvements)
+29. [Conclusion](#conclusion)
 
-## Giriş
-Bu proje, ürün ve sipariş yönetimi senaryosu üzerinden tasarlanmış portföy odaklı bir mikroservis mimarisi örneğidir. Sistem, dış istemciler için tek giriş noktası olan bir dispatcher (gateway) üzerinden çalışır ve auth, product, order servislerini bu katman üzerinden erişilebilir hale getirir.
+---
 
-## Problemin Tanımı
-Tek uygulama yaklaşımında kimlik doğrulama, ürün yönetimi, sipariş yönetimi ve yönlendirme sorumlulukları aynı kod tabanında birleştiğinde aşağıdaki problemler oluşur:
+## Overview
 
-- Sorumlulukların karışması ve bakım maliyetinin artması
-- Güvenlik ve yetkilendirme kontrollerinin dağınık uygulanması
-- Performans ve gözlemlenebilirlik ölçümlerinin merkezi toplanamaması
-- Servislerin bağımsız ölçeklenememesi
-- Tek veritabanı bağımlılığı nedeniyle sınırların zayıflaması
+This is a two-person team project implementing a microservices backend for a product and order management scenario. The system exposes a single public entry point — a Dispatcher acting as an API gateway — which routes traffic to three internal services: Auth, Product, and Order.
 
-Bu proje, bu problemleri mikroservis sınırları ve merkezi dispatcher yaklaşımı ile çözmeyi hedeflemektedir.
+## Problem Statement
 
-## Projenin Amacı
-Projenin ana amaçları aşağıdaki gibidir:
+In a monolithic setup, authentication, product management, order management, and routing all live in the same codebase. This leads to:
 
-- 4 bağımsız birimden oluşan bir mimari kurmak: dispatcher, auth service, product service, order service
-- Dispatcher'ı sistemin tek business API giriş noktası olarak konumlandırmak
-- Her birimin kendi NoSQL persistence sınırına sahip olmasını sağlamak
-- RESTful ve RMM Seviye 2 uyumlu endpoint sözleşmeleri uygulamak
-- Dispatcher tarafında test odaklı geliştirme yaklaşımını görünür kılmak
-- Monitoring (Prometheus + Grafana) ve yük testi (Locust) için ölçülebilir bir zemin hazırlamak
+- Mixed responsibilities and increasing maintenance cost
+- Scattered security and authorization logic
+- No centralized observability or metrics collection
+- No independent scaling per service
+- Weak service boundaries due to a shared database
 
-## Kullanılan Teknolojiler
-| Kategori | Teknoloji | Bu projedeki kullanım amacı |
+This project addresses these problems through clear microservice boundaries and a centralized Dispatcher.
+
+## Goals
+
+- Build a four-unit architecture: Dispatcher, Auth Service, Product Service, and Order Service
+- Position the Dispatcher as the single business API entry point
+- Give each service its own isolated NoSQL persistence boundary
+- Apply RESTful, RMM Level 2-compliant endpoint contracts
+- Make TDD visible on the Dispatcher side
+- Establish a measurable baseline for monitoring (Prometheus + Grafana) and load testing (Locust)
+
+## Tech Stack
+
+| Category | Technology | Purpose |
 | --- | --- | --- |
-| Backend çatısı | FastAPI | HTTP API geliştirme, route tanımlama, validation entegrasyonu |
-| Programlama dili | Python 3.11 | Servis geliştirme, iş kuralları, testler |
-| Doğrulama modeli | Pydantic | Request/response şemaları ve alan doğrulama |
-| Veritabanı | MongoDB | Her servis için ayrı NoSQL persistence |
-| Mongo istemcisi | Motor (AsyncIOMotorClient) | Asenkron veri erişimi |
-| Containerization | Docker | Servisleri izole çalıştırma |
-| Orkestrasyon | Docker Compose | Çoklu servis ve profil yönetimi |
-| Test | Pytest | Servis ve dispatcher davranış testleri |
-| HTTP istemci | httpx | Dispatcher proxy ve test istemcisi |
-| Kimlik doğrulama | python-jose, bcrypt | JWT üretimi/doğrulama ve parola hashleme |
-| Gözlemlenebilirlik | Prometheus, Grafana | Metrik toplama ve dashboard görselleştirme |
+| Backend framework | FastAPI | HTTP API, route definitions, validation integration |
+| Language | Python 3.11 | Service logic, business rules, tests |
+| Validation | Pydantic | Request/response schemas and field validation |
+| Database | MongoDB | Per-service NoSQL persistence |
+| MongoDB client | Motor | Async database access |
+| Containerization | Docker | Isolated service execution |
+| Orchestration | Docker Compose | Multi-service and profile management |
+| Testing | Pytest | Service and Dispatcher behavior tests |
+| HTTP client | httpx | Dispatcher proxy and test client |
+| Auth | python-jose, bcrypt | JWT generation/validation and password hashing |
+| Observability | Prometheus, Grafana | Metrics collection and dashboard visualization |
 
-## Sistem Mimarisi
-Sistemin genel topolojisi aşağıdaki gibidir:
+## System Architecture
 
 ```mermaid
 flowchart LR
-  Client[Dış İstemci]
+  Client[External Client]
 
-  subgraph PublicAPI[Public API Katmanı]
+  subgraph PublicAPI[Public API Layer]
     D[Dispatcher Gateway<br/>:8000]
   end
 
@@ -107,7 +107,7 @@ flowchart LR
     DDM[(dispatcher_mongo)]
   end
 
-  subgraph Observability[Monitoring Profili]
+  subgraph Observability[Monitoring Profile]
     PR[Prometheus<br/>:9090]
     GR[Grafana<br/>host:4000]
   end
@@ -126,21 +126,22 @@ flowchart LR
   GR -->|query| PR
 ```
 
-## Mikroservislerin Görevleri
+## Service Responsibilities
+
 ### 1) Dispatcher
-- Dış dünyaya açık ana giriş noktasıdır.
-- `/auth`, `/products`, `/orders` trafiğini ilgili iç servislere yönlendirir.
-- Ürün ve sipariş kaynaklarına gelen isteklerde merkezi yetkilendirme kontrolü uygular.
-- Trafik loglarını ve access profile verisini kendi persistence sınırında tutar.
-- `/metrics` endpoint'i ile Prometheus uyumlu metrik üretir.
+- The sole public-facing entry point.
+- Routes `/auth`, `/products`, and `/orders` traffic to the corresponding internal services.
+- Applies centralized authorization on all product and order requests.
+- Stores traffic logs and access profile data in its own persistence boundary.
+- Exposes a `/metrics` endpoint for Prometheus scraping.
 
 ### 2) Auth Service
-- Kullanıcı kayıt (`POST /register`) ve giriş (`POST /login`) işlemlerini yönetir.
-- JWT token üretir ve token doğrulama (`GET /verify-token`) sağlar.
-- Parola hashleme ve parola doğrulama işlemlerini yürütür.
+- Handles user registration (`POST /register`) and login (`POST /login`).
+- Issues JWT tokens and provides token verification (`GET /verify-token`).
+- Manages password hashing and validation.
 
 ### 3) Product Service
-- Ürün CRUD işlemlerini yönetir:
+- Handles full product CRUD:
   - `GET /products`
   - `GET /products/{id}`
   - `POST /products`
@@ -149,83 +150,88 @@ flowchart LR
   - `DELETE /products/{id}`
 
 ### 4) Order Service
-- Sipariş CRUD ve yaşam döngüsü işlemlerini yönetir:
+- Handles order CRUD and lifecycle management:
   - `GET /orders`
   - `GET /orders/{id}`
   - `POST /orders`
   - `PATCH /orders/{id}`
   - `DELETE /orders/{id}`
-- Sipariş toplam tutarını (`total_amount`) item listesi üzerinden hesaplar.
+- Computes `total_amount` from the order item list.
 
-## Dispatcher/Gateway Mantığı
-Dispatcher, iç servisleri dış dünyadan soyutlayan bir API gateway katmanıdır.
+## Dispatcher / Gateway Logic
 
-Temel davranışlar:
-- Route kayıtları merkezi olarak yapılır (`/auth/{path:path}`, `/products`, `/orders`).
-- Auth dışındaki protected kaynaklar için token + access profile kontrolü middleware düzeyinde uygulanır.
-- Upstream cevaplarının status code ve body semantiği mümkün olduğunca korunur.
-- Upstream bağlantı hatalarında `503 Service Unavailable`, beklenmeyen iç hatalarda `500 Internal Server Error` döndürülür.
+The Dispatcher abstracts internal services from the outside world and acts as the API gateway layer.
 
-Haritalama özeti:
-| Dış API (Dispatcher) | İç hedef servis |
+Core behavior:
+- Routes are registered centrally: `/auth/{path:path}`, `/products`, `/orders`.
+- Token and access profile validation runs at middleware level for all protected resources.
+- Upstream response status codes and body semantics are preserved where possible.
+- Returns `503 Service Unavailable` on upstream connection failures and `500 Internal Server Error` for unexpected internal errors.
+
+Route mapping:
+
+| Dispatcher (external) | Internal target |
 | --- | --- |
 | `/auth/{path}` | `auth_service/{path}` |
 | `/products...` | `product_service/products...` |
 | `/orders...` | `order_service/orders...` |
 
-## Kimlik Doğrulama ve Yetkilendirme Yapısı
-### Kimlik doğrulama (Authentication)
-- Kullanıcı `POST /auth/register` ve `POST /auth/login` akışlarıyla token alır.
-- Dispatcher üzerinden gelen `/auth/*` çağrıları auth servisine aktarılır.
+## Authentication and Authorization
 
-### Yetkilendirme (Authorization)
-- Dispatcher, `/products` ve `/orders` prefix'leri için koruma uygular.
-- Authorization header yoksa veya token geçersizse `401 Unauthorized` döner.
-- Token geçerli olsa da ilgili kaynak-yöntem izni yoksa `403 Forbidden` döner.
-- Access profile verisi dispatcher'ın kendi `access_profiles` koleksiyonunda tutulur.
-- Varsayılan yaklaşımda `default-authenticated` profili okuma odaklıdır (GET izinleri).
+### Authentication
+- Users obtain a token via `POST /auth/register` and `POST /auth/login`.
+- All `/auth/*` calls pass through the Dispatcher to the Auth Service.
 
-## Veri Tabanı İzolasyonu
-Servisler arasında paylaşılan tek bir veritabanı yerine, her servis için ayrı MongoDB konteyneri tanımlanmıştır.
+### Authorization
+- The Dispatcher enforces protection on `/products` and `/orders` prefixes.
+- Missing or invalid tokens return `401 Unauthorized`.
+- A valid token without the required method permission returns `403 Forbidden`.
+- Access profiles are stored in the Dispatcher's own `access_profiles` collection.
+- The default `default-authenticated` profile grants read-only access.
 
-| Birim | Mongo Servisi | Varsayılan DB adı | Sınır |
+## Database Isolation
+
+Each service has its own dedicated MongoDB container rather than sharing a single database instance.
+
+| Unit | Mongo Service | Default DB | Boundary |
 | --- | --- | --- | --- |
-| Auth Service | `auth_mongo` | `auth_db` | Kimlik verileri |
-| Product Service | `product_mongo` | `product_db` | Ürün verileri |
-| Order Service | `order_mongo` | `order_db` | Sipariş verileri |
-| Dispatcher | `dispatcher_mongo` | `dispatcher_db` | Trafik logları + access profile |
+| Auth Service | `auth_mongo` | `auth_db` | Identity data |
+| Product Service | `product_mongo` | `product_db` | Product data |
+| Order Service | `order_mongo` | `order_db` | Order data |
+| Dispatcher | `dispatcher_mongo` | `dispatcher_db` | Traffic logs + access profiles |
 
-Bu yapı, persistence boundary ilkesini korur ve servisler arası doğrudan veritabanı bağımlılığını engeller.
+This enforces persistence boundaries and prevents direct cross-service database access.
 
 ## Network Isolation
-`docker-compose.yml` içinde tüm servisler `internal_network` ağına bağlıdır.
 
-İzolasyon özeti:
-- Auth/Product/Order servisleri host port publish etmez.
-- Mongo konteynerleri host port publish etmez.
-- Business API için dışa açılan tek kapı dispatcher'dır (`8000:8000`).
-- Monitoring profili açıldığında Prometheus (`9090`) ve Grafana (`4000 -> 3000`) gözlem amaçlı ayrıca publish edilir.
+All services are attached to `internal_network` in `docker-compose.yml`.
 
-Bu nedenle iç servisler doğrudan public endpoint gibi tasarlanmamış, gateway arkasında çalışacak şekilde konumlandırılmıştır.
+- Auth, Product, and Order services do not publish host ports.
+- MongoDB containers do not publish host ports.
+- The only public-facing port is the Dispatcher on `8000:8000`.
+- When the monitoring profile is active, Prometheus (`9090`) and Grafana (`4000 → 3000`) are also published for observation.
 
-## Docker ve Orkestrasyon Yapısı
-Aşağıdaki komutlar Windows PowerShell üzerinde, repo kök dizini `C:\Users\husoelrey\Documents\Projects\product-order-microservices` içinden çalıştırılmıştır.
+Internal services are not designed as public endpoints — they run exclusively behind the gateway.
 
-### Runtime başlatma
+## Docker and Orchestration
+
+All commands are run from the repo root directory.
+
+### Starting the runtime
 ```powershell
 docker compose -f src/docker-compose.yml up --build
 ```
 
-Çalışan servislerin Docker Compose üzerindeki durumu aşağıdaki ekran görüntüsünde gösterilmektedir.
+Service status in Docker Compose:
 
-![Docker Compose servis durumu](assets/manual_tests/docker-compose-services-status.png)
+![Docker Compose service status](assets/manual_tests/docker-compose-services-status.png)
 
-### Monitoring profilini başlatma
+### Starting the monitoring profile
 ```powershell
 docker compose -f src/docker-compose.yml --profile monitoring up -d prometheus grafana
 ```
 
-### Test profilini konteyner üzerinde çalıştırma
+### Running tests in containers
 ```powershell
 docker compose -f src/docker-compose.yml --profile test run --rm auth_tests
 docker compose -f src/docker-compose.yml --profile test run --rm dispatcher_tests
@@ -233,110 +239,102 @@ docker compose -f src/docker-compose.yml --profile test run --rm product_tests
 docker compose -f src/docker-compose.yml --profile test run --rm order_tests
 ```
 
-## API Tasarımı
-API tasarımı kaynak odaklıdır ve dispatcher dış sözleşmesi üzerinden birleşik bir yüzey sunar.
+## API Design
 
-Tasarım ilkeleri:
-- Kaynak bazlı URL yapıları (`/products`, `/orders`, `/auth/...`)
-- HTTP methodlarının amaca uygun kullanımı
-- Uygun status code üretimi
-- Request/response şemalarında alan doğrulama
+The API follows a resource-oriented design and presents a unified surface through the Dispatcher.
 
-## RESTful Yaklaşım
-Projedeki yöntem dağılımı REST yaklaşımıyla uyumludur:
+Design principles:
+- Resource-based URL structures: `/products`, `/orders`, `/auth/...`
+- HTTP methods used according to their intended semantics
+- Appropriate status codes per response type
+- Field validation on all request/response schemas via Pydantic
 
-- `GET`: listeleme/detay okuma
-- `POST`: oluşturma veya auth işlem başlangıcı
-- `PUT`: ürün kaynağını tam değiştirme
-- `PATCH`: kısmi güncelleme
-- `DELETE`: kaynak silme
+HTTP method usage:
 
-Durum kodları da davranışa göre ayrıştırılmıştır (200, 201, 204, 401, 403, 404, 409, 422, 500, 503).
+- `GET` — listing and detail reads
+- `POST` — resource creation or auth flow initiation
+- `PUT` — full resource replacement
+- `PATCH` — partial update
+- `DELETE` — resource removal
 
-## Richardson Maturity Model Seviye 2
-Bu proje RMM Seviye 2 beklentisini aşağıdaki şekilde karşılar:
+## Richardson Maturity Model Level 2
 
-- Tek endpoint üstünden action taşıma yerine kaynak odaklı URI tasarımı vardır.
-- Farklı işlevler farklı HTTP methodlarına bölünmüştür.
-- Method + status code kombinasyonları semantik farkları yansıtır.
+This project meets RMM Level 2 by:
 
-## Literatür ve Karmaşıklık Notları
-### Literatür ve tasarım dayanakları
-Bu README'deki tasarım kararları ve kavramsal çerçeve aşağıdaki başlıklara dayandırılmıştır:
+- Using resource-oriented URIs instead of action-based single endpoints.
+- Splitting operations across HTTP methods.
+- Reflecting semantic differences through method and status code combinations.
 
-- Mikroservis mimarisi ve servis sınırları
-- API Gateway / Dispatcher yaklaşımı
-- RESTful API tasarımı ve Richardson Maturity Model
-- Docker Compose ile çoklu servis orkestrasyonu
-- Test odaklı geliştirme, yük testi ve gözlemlenebilirlik pratikleri
+## Complexity Notes
 
-Kullanılan mimari terminoloji ve değerlendirme başlıkları, mikroservis, REST, Docker, TDD ve gözlemlenebilirlik pratiklerine ilişkin genel yazılım mühendisliği kaynaklarıyla uyumlu olacak şekilde ele alınmıştır.
+The project is dominated by network routing, authorization, and CRUD flows rather than heavy algorithmic processing.
 
-### Karmaşıklık notları
-Projede ağır algoritmik işlem yerine ağ yönlendirme, yetkilendirme ve CRUD akışları baskındır. Bu nedenle teorik karmaşıklık yorumları aşağıdaki şekilde özetlenebilir:
+- Dispatcher route matching operates over a fixed set of prefixes, so routing is constant time. The main practical cost is upstream network latency.
+- Authorization checks a fixed set of protected prefixes. The permission scan within an access profile is O(p) where p is the number of permissions — small and bounded in this project.
+- Order total calculation is a single-pass sum over the item list: O(n) where n is the number of items.
+- Listing endpoints scale with the number of records returned; the real bottleneck in practice is database I/O and network transfer.
 
-- Dispatcher route eşlemesi sabit sayıda kaynak (`/auth`, `/products`, `/orders`) üzerinden çalıştığı için yönlendirme tarafı sabit zamanlıdır; pratik maliyetin ana kısmı upstream ağ gecikmesidir.
-- Yetkilendirme kontrolünde protected path kararı sabit prefix kümesine bakar; access profile içindeki izin taraması izin sayısı `p` için `O(p)` düzeyindedir. Mevcut projede `p` küçük ve sınırlıdır.
-- Sipariş toplam tutarı hesaplaması item listesi üzerinde tek geçişli toplama ile yapılır; item sayısı `n` için `O(n)` maliyetlidir.
-- Listeleme endpoint'lerinde uygulama tarafı maliyet, döndürülen kayıt sayısı `k` ile artar; gerçek darboğaz çoğunlukla veritabanı I/O ve ağ aktarımıdır.
+These notes should be read alongside the load test and monitoring results, where performance is assessed through measured latency and failure rates.
 
-Bu teorik notlar, aşağıdaki load test ve monitoring çıktılarıyla birlikte okunmalıdır; projede performans değerlendirmesi yalnızca Big-O yorumu ile değil, ölçülen gecikme ve failure oranları ile de desteklenmiştir.
+## Endpoint Summary
 
-## Servis Endpoint Özeti
-### Dış sözleşme (dispatcher üzerinden)
-| Method | Endpoint | Açıklama |
+### External contract (via Dispatcher)
+
+| Method | Endpoint | Description |
 | --- | --- | --- |
-| GET | `/` | Dispatcher sağlık mesajı |
-| GET | `/metrics` | Prometheus metrik endpoint'i |
-| GET/POST/PUT/PATCH/DELETE | `/auth/{path}` | Auth servisine proxy |
-| GET | `/products` | Ürün listesi |
-| POST | `/products` | Ürün oluşturma |
-| GET | `/products/{id}` | Ürün detayı |
-| PUT | `/products/{id}` | Ürün tam güncelleme |
-| PATCH | `/products/{id}` | Ürün kısmi güncelleme |
-| DELETE | `/products/{id}` | Ürün silme |
-| GET | `/orders` | Sipariş listesi |
-| POST | `/orders` | Sipariş oluşturma |
-| GET | `/orders/{id}` | Sipariş detayı |
-| PATCH | `/orders/{id}` | Sipariş kısmi güncelleme |
-| DELETE | `/orders/{id}` | Sipariş silme |
+| GET | `/` | Dispatcher health check |
+| GET | `/metrics` | Prometheus metrics endpoint |
+| GET/POST/PUT/PATCH/DELETE | `/auth/{path}` | Proxy to Auth Service |
+| GET | `/products` | List products |
+| POST | `/products` | Create product |
+| GET | `/products/{id}` | Get product detail |
+| PUT | `/products/{id}` | Full product update |
+| PATCH | `/products/{id}` | Partial product update |
+| DELETE | `/products/{id}` | Delete product |
+| GET | `/orders` | List orders |
+| POST | `/orders` | Create order |
+| GET | `/orders/{id}` | Get order detail |
+| PATCH | `/orders/{id}` | Partial order update |
+| DELETE | `/orders/{id}` | Delete order |
 
-### İç servis endpointleri (internal kullanım)
-| Servis | Endpointler |
+### Internal service endpoints
+
+| Service | Endpoints |
 | --- | --- |
 | Auth Service | `POST /register`, `POST /login`, `GET /verify-token` |
 | Product Service | `GET/POST /products`, `GET/PUT/PATCH/DELETE /products/{id}` |
 | Order Service | `GET/POST /orders`, `GET/PATCH/DELETE /orders/{id}` |
 
-### Status code davranış özeti
-| Kod | Anlam | Tipik senaryo |
+### Status code reference
+
+| Code | Meaning | Typical scenario |
 | --- | --- | --- |
-| 200 | Başarılı işlem | Listeleme, detay, login |
-| 201 | Kaynak oluşturuldu | Ürün/sipariş oluşturma |
-| 204 | Gövdesiz başarılı silme | Silme işlemleri |
-| 401 | Kimlik doğrulama başarısız | Token yok/geçersiz |
-| 403 | Yetki yetersiz | Token geçerli ama izin yok |
-| 404 | Kaynak bulunamadı | Geçersiz id veya yanlış route |
-| 405 | Method desteklenmiyor | Kaynak için tanımsız method |
-| 409 | Çakışma | Aynı kullanıcı adıyla tekrar kayıt |
-| 422 | Doğrulama hatası | Şema/field doğrulama hatası |
-| 500 | İç hata | Beklenmeyen dispatcher iç hatası |
-| 503 | Servis erişilemiyor | Upstream bağlantı problemi |
+| 200 | OK | List, detail, login |
+| 201 | Created | Product or order creation |
+| 204 | No Content | Delete operations |
+| 401 | Unauthorized | Missing or invalid token |
+| 403 | Forbidden | Valid token, insufficient permission |
+| 404 | Not Found | Invalid ID or route |
+| 405 | Method Not Allowed | Unsupported method for the resource |
+| 409 | Conflict | Duplicate username on registration |
+| 422 | Unprocessable Entity | Schema or field validation failure |
+| 500 | Internal Server Error | Unexpected Dispatcher error |
+| 503 | Service Unavailable | Upstream connection failure |
 
-## Katmanlı Mimari Açıklaması
-Projede katmanlar servis bazında ayrılmıştır:
+## Layered Architecture
 
-- Router/Controller katmanı: HTTP endpoint tanımı ve hata kodu dönüşleri
-- Service katmanı: iş kuralları ve akış yönetimi
-- Repository katmanı: veritabanı erişimi
-- Schema katmanı: veri doğrulama sözleşmesi
-- Model katmanı: domain nesneleri
-- Core katmanı: güvenlik, metrik, veritabanı bağlantısı gibi ortak altyapı
+Layers are separated per service:
 
-Bu ayrım, business logic'in route fonksiyonlarına gömülmesini engeller ve test edilebilirliği artırır.
+- **Router / Controller** — HTTP endpoint definitions and status code handling
+- **Service** — Business logic and flow management
+- **Repository** — Database access
+- **Schema** — Validation contracts
+- **Model** — Domain objects
+- **Core** — Shared infrastructure: security, metrics, database connections
 
-## Sınıf/Katman Yapısı
-Aşağıdaki UML sınıf diyagramı, projedeki gerçek sınıfları ve protocol/tabanlı bağımlılıkları özetlemektedir. Router katmanı FastAPI üzerinde fonksiyon tabanlı route handler'larla kurulduğu için bu diyagramda özellikle service, repository, model ve dispatcher yardımcı sınıfları gösterilmiştir.
+This separation keeps business logic out of route handlers and makes each layer independently testable.
+
+## Class Diagram
 
 ```mermaid
 classDiagram
@@ -469,31 +467,33 @@ classDiagram
   Order "1" *-- "*" OrderItem : contains
 ```
 
-## İstek Akışları
-### Akış 1: Login
-1. İstemci dispatcher üzerinden `/auth/login` çağrısı yapar.
-2. Dispatcher isteği auth servisine iletir.
-3. Auth servis kimlik bilgilerini doğrular, token üretir.
-4. Dispatcher yanıtı istemciye döndürür.
+## Request Flows
 
-### Akış 2: Yetkili ürün okuma
-1. İstemci `Authorization: Bearer <token>` ile `/products` çağrısı yapar.
-2. Dispatcher token ve access profile kontrolü yapar.
-3. Yetki uygunsa product service'e iletir.
-4. Ürün listesi yanıtını istemciye döndürür.
+### Flow 1: Login
+1. The client calls `POST /auth/login` through the Dispatcher.
+2. The Dispatcher forwards the request to the Auth Service.
+3. The Auth Service validates credentials and issues a JWT token.
+4. The Dispatcher returns the response to the client.
 
-### Akış 3: Yetkisiz yazma isteği
-1. İstemci geçerli ama yazma izni olmayan token ile `POST /products` çağırır.
-2. Dispatcher erişim profilinde method iznini kontrol eder.
-3. İzin yoksa isteği aşağı servise iletmeden `403 Forbidden` döndürür.
+### Flow 2: Authorized product read
+1. The client calls `GET /products` with `Authorization: Bearer <token>`.
+2. The Dispatcher validates the token and checks the access profile.
+3. If authorized, the request is forwarded to the Product Service.
+4. The product list is returned to the client.
 
-### Akış 4: Upstream servis kesintisi
-1. İstemci protected endpoint çağırır.
-2. Dispatcher yetki kontrolünden sonra ilgili servise iletmek ister.
-3. Upstream erişilemiyorsa `503 Service Unavailable` döndürülür.
+### Flow 3: Unauthorized write request
+1. The client calls `POST /products` with a valid token that lacks write permission.
+2. The Dispatcher checks the method permission in the access profile.
+3. Without permission, `403 Forbidden` is returned without forwarding to the downstream service.
 
-## Sequence Diagramlar
-### Sequence Diagram 1: Login ve token alma
+### Flow 4: Upstream service outage
+1. The client calls a protected endpoint.
+2. After authorization, the Dispatcher attempts to forward to the target service.
+3. If the upstream is unreachable, `503 Service Unavailable` is returned.
+
+## Sequence Diagrams
+
+### Login and token retrieval
 ```mermaid
 sequenceDiagram
   participant C as Client
@@ -506,305 +506,250 @@ sequenceDiagram
   D-->>C: 200 OK + JWT token
 ```
 
-### Sequence Diagram 2: Protected ürün yazma isteğinde yetki kontrolü
+### Authorization check on a protected write request
 ```mermaid
 sequenceDiagram
   participant C as Client
   participant D as Dispatcher
   participant P as Product Service
-  participant DB as dispatcher_mongo(access_profiles)
+  participant DB as dispatcher_mongo
 
   C->>D: POST /products (Bearer token)
   D->>D: JWT decode
-    D->>DB: subject için profil sorgula
-  alt Method izni var
+  D->>DB: Query access profile for subject
+  alt Method permission granted
     D->>P: POST /products
     P-->>D: 201 Created
     D-->>C: 201 Created
-  else Method izni yok
+  else Method permission denied
     D-->>C: 403 Forbidden
   end
 ```
 
-## Test Yaklaşımı
-Projede test yaklaşımı katmanlı ve davranış odaklıdır:
+## Testing Approach
 
-- Servis testlerinde fake collection kullanılarak veritabanı bağımlılığı azaltılmıştır.
-- Dispatcher testlerinde authz, proxy forwarding, hata semantiği, logging ve metrics davranışları doğrulanmıştır.
-- Product ve Order servislerinde CRUD akışları ve 404/204 gibi durum kodları test edilmektedir.
-- Auth servisinde register/login/verify-token temel akışları test edilmektedir.
+Tests are layered and behavior-focused across the project.
 
-Not:
-- Dispatcher tarafında belirgin bir test odaklı geliştirme akışı izlenebilmektedir.
-- Tüm proje genelinde aynı yoğunlukta kesintisiz bir TDD zinciri bulunmamaktadır.
+- Service tests use fake collections to minimize database dependency.
+- Dispatcher tests cover authorization logic, proxy forwarding, error semantics, logging, and metrics behavior.
+- Product and Order service tests cover CRUD flows and edge cases such as 404 and 204 responses.
+- Auth service tests cover the core register, login, and verify-token flows.
 
-## Dispatcher Tarafında TDD Uygulaması
-Dispatcher geliştirmelerinde test -> uygulama -> iyileştirme döngüsü özellikle gateway davranışları üzerinde uygulanmıştır.
+TDD was applied most consistently on the Dispatcher side. The rest of the project does not maintain the same level of test-first discipline throughout.
 
-Öne çıkan çalışma alanları:
-- Upstream servis hatalarında `503` semantiğinin korunması
-- Dispatcher iç hatalarında `500` davranışının ayrıştırılması
-- Protected route eşleşmelerinde prefix kaynaklı yanlış pozitiflerin engellenmesi
-- Prometheus request metriklerinin dispatcher seviyesinde üretilmesi
+## TDD on the Dispatcher
 
-## Geliştirme Süreci Özeti
-| Akış | Odak | Sonuç |
+A test → implement → refine cycle was applied to gateway behaviors on the Dispatcher.
+
+Key areas:
+- Preserving `503` semantics on upstream service failures
+- Distinguishing `500` behavior for Dispatcher-internal errors
+- Preventing false positives from prefix matching on protected routes
+- Producing Prometheus request metrics at the Dispatcher level
+
+## Development Process Summary
+
+| Flow | Focus | Outcome |
 | --- | --- | --- |
-| Upstream hata yönetimi | Aşağı servis erişilemezliği | Gateway `503` semantiğini tutarlı biçimde döndürür |
-| Internal hata yönetimi | Dispatcher iç hata ayrımı | Beklenmeyen gateway hataları `500` olarak ayrıştırılır |
-| Route guard doğruluğu | Protected path eşleşmesi | Sadece hedef kaynak prefix'leri korunur |
-| Dispatcher metrikleri | Request sayımı ve latency | Prometheus uyumlu metrik üretimi sağlanır |
+| Upstream error handling | Downstream service unreachability | Gateway returns `503` consistently |
+| Internal error handling | Dispatcher error distinction | Unexpected gateway errors are classified as `500` |
+| Route guard accuracy | Protected path matching | Only the target resource prefixes are protected |
+| Dispatcher metrics | Request counting and latency | Prometheus-compatible metrics produced |
 
-## Katkı Dağılımı
-Katkı dağılımı, aktif geliştirme sürecindeki ana sorumluluk alanları üzerinden özetlenmiştir.
+## Contribution Breakdown
 
-| Geliştirici | Öne çıkan katkı alanları |
+| Developer | Primary areas |
 | --- | --- |
-| Hüseyin Erekmen | Dispatcher, yetkilendirme, test altyapısı, monitoring ve yük testi |
-| Rana Karagöl | Auth/Product/Order servisleri, veri modelleri, repository-service katmanı ve servis testleri |
+| Hüseyin Erekmen | Dispatcher, authorization, test infrastructure, monitoring, and load testing |
+| Rana Karagöl | Auth, Product, and Order services, data models, repository/service layers, and service tests |
 
-Bu dağılım, iki geliştiricinin de mimarinin farklı katmanlarında aktif rol aldığını göstermektedir.
+Both developers contributed actively to different layers of the architecture.
 
-## Monitoring ve Görselleştirme
-Projede monitoring katmanı Prometheus + Grafana ile yapılandırılmıştır.
+## Monitoring and Observability
 
-### Prometheus'un rolü
-- Dispatcher'ın `/metrics` endpoint'ini scrape ederek metrik toplar.
-- Gateway üzerinde oluşan request sayıları, status code dağılımı ve latency histogramlarını sorgulanabilir hale getirir.
+The monitoring stack is built on Prometheus and Grafana.
 
-### Grafana dashboard'un rolü
-Provision edilen `Dispatcher Overview` dashboard'u aşağıdaki panelleri içerir:
+### Prometheus
+- Scrapes the Dispatcher's `/metrics` endpoint.
+- Collects request counts, status code distribution, and latency histograms.
+
+### Grafana dashboard
+The provisioned `Dispatcher Overview` dashboard includes:
 - `Requests (15m)`
 - `Status Codes (15m)`
 - `Request Latency P95`
 
-### Monitoring Çıktıları
-Grafana ve Prometheus üzerinden elde edilen izleme çıktıları aşağıda verilmiştir.
+### Monitoring outputs
 
-#### Grafana dashboard görünümü
+#### Grafana dashboard
 ![Grafana dispatcher overview](assets/monitoring/grafana-dispatcher-overview.png)
 
 #### Prometheus target health
 ![Prometheus targets health](assets/monitoring/prometheus-targets-health.png)
 
-#### Prometheus status code sorgusu
+#### Prometheus status code query
 ![Prometheus status codes query](assets/monitoring/prometheus-status-codes-query.png)
 
-#### Dashboard değerlendirmesi
-- Grafana dashboard'u istek hacmi, durum kodları ve gecikme metriklerini tek ekranda göstermektedir.
-- Prometheus target ekranı dispatcher `/metrics` endpoint'inin başarıyla scrape edildiğini doğrulamaktadır.
-- Prometheus status code sorguları, metrik akışının sağlıklı toplandığını ve farklı durum kodlarının gözlenebildiğini göstermektedir.
-- Bu sorgudaki değerler toplam sayaç (counter) olduğundan, tek başına ana performans benchmark metriği olarak değil destekleyici gözlem olarak yorumlanmıştır.
+#### Notes
+- The Grafana dashboard presents request volume, status codes, and latency on a single screen.
+- The Prometheus target page confirms that the Dispatcher's `/metrics` endpoint is being scraped successfully.
+- Status code queries show that metrics are collected correctly and multiple response codes are observable.
+- Query values are cumulative counters and are used as supporting observations rather than primary performance benchmarks.
 
-### Dispatcher log tablosu
-Dispatcher üzerindeki trafik kayıtları, `dispatcher_db` içindeki `traffic_logs` koleksiyonunda tutulmaktadır. Aşağıdaki tablo görüntüsü, farklı istek türlerinin merkezi olarak izlenebildiğini göstermektedir.
+### Traffic log table
 
-Tabloyu üretmek için kullanılan sorgu:
+Traffic logs are stored in the `traffic_logs` collection in `dispatcher_db`. The table below shows that different request types can be monitored centrally.
 
+Query used to generate the output:
 ```powershell
 docker exec dispatcher_mongo mongosh --% "mongodb://localhost:27017/dispatcher_db" --quiet --eval "console.table(db.traffic_logs.find({path: {$ne: '/metrics'}}, {_id:0, timestamp:1, method:1, path:1, service:1, status_code:1, client_ip:1}).sort({timestamp:-1}).limit(20).toArray())"
 ```
 
 ![Dispatcher log table](assets/monitoring/log_table_dispatcher.png)
 
-Tabloda görülen temel alanlar:
-- `timestamp`
-- `method`
-- `path`
-- `service`
-- `status_code`
-- `client_ip`
+Logged fields: `timestamp`, `method`, `path`, `service`, `status_code`, `client_ip`.
 
-Bu log görünümü içinde başarılı istekler (`200`, `201`) ile birlikte yetkisiz erişim (`401`), yetki yetersizliği (`403`), kaynak bulunamadı (`404`) ve upstream servis erişim problemi (`503`) aynı koleksiyonda gözlenebilmektedir. Bu görüntüde `/metrics` kayıtları özellikle filtrelenmiştir; böylece business API trafiği daha okunabilir hale getirilmiştir.
+The log captures successful requests (`200`, `201`) alongside unauthorized access (`401`), insufficient permission (`403`), not found responses (`404`), and upstream failures (`503`) in the same collection. The `/metrics` path is filtered out to keep business API traffic readable.
 
-### Postman / Manuel API Çıktıları
+### API outputs (Postman / manual tests)
 
-#### Login isteği
+#### Login request
 ![Auth login response](assets/manual_tests/auth-login-response.png)
 
-#### Başarılı silme işlemi (`204 No Content`)
+#### Successful delete (`204 No Content`)
 ![Delete response 204 no content](assets/manual_tests/delete-response-204-no-content.png)
 
-#### Yetkisiz istek (`401 Unauthorized`)
+#### Unauthorized request (`401`)
 ![Unauthorized response 401](assets/manual_tests/unauthorized-response-401.png)
 
-#### Yetki yetersiz istek (`403 Forbidden`)
+#### Forbidden request (`403`)
 ![Forbidden response 403](assets/manual_tests/forbidden-response-403.png)
 
-#### Kaynak bulunamadı (`404 Not Found`)
+#### Not found (`404`)
 ![Not found response 404](assets/manual_tests/not-found-response-404.png)
 
-## Yük Testi (Locust)
-Locust ile dispatcher/gateway üzerine eşzamanlı trafik üretilmiş; her senaryoda Locust istatistikleri, Grafana paneli ve Prometheus status code sorgusu birlikte kaydedilmiştir.
+## Load Testing
 
-### Locust çalıştırma komutları (PowerShell)
-Aşağıdaki komutlar repo kök dizininden çalıştırılmak üzere kullanılmıştır:
+Concurrent traffic was generated against the Dispatcher using Locust. For each scenario, Locust stats, Grafana panels, and Prometheus status code queries were captured together.
+
+### Running Locust
 
 ```powershell
 python -m locust -f .\load_tests\locustfile.py --host http://localhost:8000
 ```
 
-Headless örnek benchmark komutu:
-
+Headless benchmark:
 ```powershell
 python -m locust -f .\load_tests\locustfile.py --host http://localhost:8000 --headless --users 100 --spawn-rate 10 --run-time 3m
 ```
 
-### Kısa Metodoloji
-- Testler artımlı olarak 20, 50, 100 ve 300 kullanıcı seviyelerinde çalıştırılmıştır.
-- Ana karşılaştırma benchmark seti 20/50/100 kullanıcı senaryolarıdır.
-- 300 kullanıcı seviyesi ayrı bir ek stres testi olarak değerlendirilmiştir.
-- Performans karşılaştırmasında Locust `Aggregated` satırı temel alınmıştır.
-- Prometheus status code sorguları toplam sayaç ürettiği için ana benchmark metriği olarak değil destekleyici gözlem verisi olarak kullanılmıştır.
+### Methodology
 
-### Ana Karşılaştırma Tablosu (20 / 50 / 100)
-| Test | Users | Spawn Rate | Total Requests | Failures | Failure Rate | Average | Median | P95 | P99 | Current RPS | Değerlendirme |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 20 Kullanıcı | 20 | 2 kullanıcı/s | 1842 | 0 | %0 | 15.38 ms | 13 ms | 24 ms | 110 ms | 9.2 | Stabil ve düşük gecikmeli başlangıç seviyesi. |
-| 50 Kullanıcı | 50 | 5 kullanıcı/s | 4604 | 0 | %0 | 15.54 ms | 12 ms | 24 ms | 140 ms | 26.8 | Throughput artarken sistem stabil kalıyor. |
-| 100 Kullanıcı | 100 | 10 kullanıcı/s | 9206 | 0 | %0 | 17.10 ms | 11 ms | 34 ms | 170 ms | 49.8 | Yük altında kararlı davranan güçlü seviye. |
+Tests were run incrementally at 20, 50, 100, and 300 concurrent users. The primary benchmark set is 20/50/100 users; the 300-user run is a separate stress test. The Locust `Aggregated` row is the reference metric for comparisons. Prometheus status code queries produce cumulative counters and are treated as supporting observations.
 
-### 20 Kullanıcılı Test
-Kurulum parametreleri:
-- Users: 20
-- Spawn rate: 2 kullanıcı/saniye
-- Host: `http://host.docker.internal:8000`
+### Benchmark comparison (20 / 50 / 100 users)
 
-İlgili ekran görüntüleri:
+| Test | Users | Spawn Rate | Total Requests | Failures | Failure Rate | Avg | Median | P95 | P99 | RPS |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20 users | 20 | 2/s | 1,842 | 0 | 0% | 15.38 ms | 13 ms | 24 ms | 110 ms | 9.2 |
+| 50 users | 50 | 5/s | 4,604 | 0 | 0% | 15.54 ms | 12 ms | 24 ms | 140 ms | 26.8 |
+| 100 users | 100 | 10/s | 9,206 | 0 | 0% | 17.10 ms | 11 ms | 34 ms | 170 ms | 49.8 |
+
+### 20-user test
+
+Config: 20 users, spawn rate 2/s
 
 ![20 users locust config](assets/monitoring/load_tests/20_users/01-20-users-locust-config.png)
 ![20 users locust statistics](assets/monitoring/load_tests/20_users/02-20-users-locust-statistics.png)
 ![20 users grafana dashboard](assets/monitoring/load_tests/20_users/03-20-users-grafana-dashboard.png)
 ![20 users prometheus status codes](assets/monitoring/load_tests/20_users/04-20-users-prometheus-status-codes.png)
 
-Locust `Aggregated` bulguları:
-- Total requests: 1842
-- Failures: 0 (%0)
-- Average: 15.38 ms
-- Median: 13 ms
-- P95: 24 ms
-- P99: 110 ms
-- Current RPS: 9.2
+- Total: 1,842 requests, 0 failures
+- Avg: 15.38 ms · Median: 13 ms · P95: 24 ms · P99: 110 ms · RPS: 9.2
+- Read endpoints stayed low — `GET /products` avg 12.36 ms, `GET /orders` avg 15.65 ms
+- Auth endpoints were slower — `POST /auth/login` avg 118.96 ms, `POST /auth/register` avg 64.32 ms
 
-Endpoint gözlemleri:
-- Okuma endpoint'leri düşük gecikmede kalmıştır (`GET /products` ort. 12.36 ms, `GET /orders` ort. 15.65 ms).
-- Auth endpoint'leri daha yavaştır (`POST /auth/login` ort. 118.96 ms, `POST /auth/register` ort. 64.32 ms).
+### 50-user test
 
-### 50 Kullanıcılı Test
-Kurulum parametreleri:
-- Users: 50
-- Spawn rate: 5 kullanıcı/saniye
-- Host: `http://host.docker.internal:8000`
-
-İlgili ekran görüntüleri:
+Config: 50 users, spawn rate 5/s
 
 ![50 users locust config](assets/monitoring/load_tests/50_users/01-50-users-locust-config.png)
 ![50 users locust statistics](assets/monitoring/load_tests/50_users/02-50-users-locust-statistics.png)
 ![50 users grafana dashboard](assets/monitoring/load_tests/50_users/03-50-users-grafana-dashboard.png)
 ![50 users prometheus status codes](assets/monitoring/load_tests/50_users/04-50-users-prometheus-status-codes.png)
 
-Locust `Aggregated` bulguları:
-- Total requests: 4604
-- Failures: 0 (%0)
-- Average: 15.54 ms
-- Median: 12 ms
-- P95: 24 ms
-- P99: 140 ms
-- Current RPS: 26.8
+- Total: 4,604 requests, 0 failures
+- Avg: 15.54 ms · Median: 12 ms · P95: 24 ms · P99: 140 ms · RPS: 26.8
+- Read endpoints held their latency band — `GET /products` avg 11.79 ms, `GET /orders` avg 14.64 ms
+- Auth endpoints remained slower — `POST /auth/login` avg 141.31 ms, `POST /auth/register` avg 127.42 ms
 
-Endpoint gözlemleri:
-- Okuma endpoint'leri düşük gecikme bandını korumuştur (`GET /products` ort. 11.79 ms, `GET /orders` ort. 14.64 ms).
-- Auth endpoint'leri yine daha yavaştır (`POST /auth/login` ort. 141.31 ms, `POST /auth/register` ort. 127.42 ms).
+### 100-user test
 
-### 100 Kullanıcılı Test
-Kurulum parametreleri:
-- Users: 100
-- Spawn rate: 10 kullanıcı/saniye
-- Host: `http://host.docker.internal:8000`
-
-İlgili ekran görüntüleri:
+Config: 100 users, spawn rate 10/s
 
 ![100 users locust config](assets/monitoring/load_tests/100_users/01-100-users-locust-config.png)
 ![100 users locust statistics](assets/monitoring/load_tests/100_users/02-100-users-locust-statistics.png)
 ![100 users grafana dashboard](assets/monitoring/load_tests/100_users/03-100-users-grafana-dashboard.png)
 ![100 users prometheus status codes](assets/monitoring/load_tests/100_users/04-100-users-prometheus-status-codes.png)
 
-Locust `Aggregated` bulguları:
-- Total requests: 9206
-- Failures: 0 (%0)
-- Average: 17.10 ms
-- Median: 11 ms
-- P95: 34 ms
-- P99: 170 ms
-- Current RPS: 49.8
+- Total: 9,206 requests, 0 failures
+- Avg: 17.10 ms · Median: 11 ms · P95: 34 ms · P99: 170 ms · RPS: 49.8
+- Read endpoints remained stable — `GET /products` avg 12.50 ms, `GET /orders` avg 15.24 ms
+- Auth endpoints continued to lag — `POST /auth/login` avg 159.21 ms, `POST /auth/register` avg 189.72 ms
 
-Endpoint gözlemleri:
-- Okuma endpoint'leri stabil kalmıştır (`GET /products` ort. 12.50 ms, `GET /orders` ort. 15.24 ms).
-- Auth endpoint'leri bu seviyede de daha yavaştır (`POST /auth/login` ort. 159.21 ms, `POST /auth/register` ort. 189.72 ms).
+Zero failures and controlled P95/P99 at 100 users indicate the system held up well at this load level.
 
-100 kullanıcı seviyesinde failure oranının %0 kalması ve P95/P99 değerlerinin kontrol altında seyretmesi, bu yük seviyesinde sistemin kararlı davrandığını göstermektedir.
+### 300-user stress test
 
-### 300 Kullanıcılı Ek Stres Testi
-Kurulum parametreleri:
-- Users: 300
-- Spawn rate: 20 kullanıcı/saniye
-- Host: `http://dispatcher:8000`
-
-İlgili ekran görüntüleri:
+Config: 300 users, spawn rate 20/s
 
 ![300 users locust config](assets/monitoring/load_tests/300_users/01-300-users-locust-config.png)
 ![300 users locust statistics](assets/monitoring/load_tests/300_users/02-300-users-locust-statistics.png)
 ![300 users grafana dashboard](assets/monitoring/load_tests/300_users/03-300-users-grafana-dashboard.png)
 ![300 users prometheus status codes](assets/monitoring/load_tests/300_users/04-300-users-prometheus-status-codes.png)
 
-Locust `Aggregated` bulguları:
-- Total requests: 26215
-- Failures: 0 (%0)
-- Average: 90.82 ms
-- Median: 24 ms
-- P95: 400 ms
-- P99: 1100 ms
-- Current RPS: 118.2
+- Total: 26,215 requests, 0 failures
+- Avg: 90.82 ms · Median: 24 ms · P95: 400 ms · P99: 1,100 ms · RPS: 118.2
+- Auth endpoints spiked — `POST /auth/login` avg 319.83 ms, `POST /auth/register` avg 409.14 ms
+- Read endpoints also showed increased latency — `GET /products` avg 91.84 ms, `GET /orders` avg 76.02 ms
 
-Endpoint gözlemleri:
-- Auth endpoint'leri belirgin şekilde yükselmiştir (`POST /auth/login` ort. 319.83 ms, `POST /auth/register` ort. 409.14 ms).
-- Okuma endpoint'lerinde de gecikme artışı gözlenmiştir (`GET /products` ort. 91.84 ms, `GET /orders` ort. 76.02 ms).
+The system kept running without errors at this level, but latency rose sharply. This test is treated as a durability observation rather than a primary benchmark.
 
-Bu seviyede sistem hata üretmeden çalışmaya devam etmiştir; ancak latency belirgin şekilde yükselmiştir. Bu nedenle 300 kullanıcı senaryosu, ana benchmark karşılaştırmasından ayrı tutulmuş ve sistemin daha yüksek yük altındaki davranışını gözlemlemek için ek stres testi olarak kullanılmıştır.
+### Summary
 
-### Kısa Genel Değerlendirme
-- 20/50/100 kullanıcı testleri güçlü ve stabil bir davranış göstermiştir.
-- Ana benchmark setinde failure oranı %0 olarak korunmuştur.
-- Auth endpoint'leri tüm seviyelerde diğer endpoint'lere göre daha yüksek gecikme üretmektedir.
-- 100 kullanıcı seviyesi, bu proje için en güçlü ana yük testi seviyesi olarak öne çıkmaktadır.
-- 300 kullanıcı seviyesinde sistem çökmemiştir; fakat gecikme artışı belirgindir ve bu test dayanıklılık gözlemi olarak değerlendirilmelidir.
+- The 20/50/100-user tests showed stable, low-latency performance with a 0% failure rate throughout.
+- Auth endpoints consistently produced higher latency than read endpoints at all load levels.
+- 100 users is the strongest primary benchmark level for this project.
+- At 300 users the system did not crash, but the latency increase is significant and expected at this scale.
 
-## Başarılar
-- Dispatcher, auth, product ve order servislerinden oluşan 4 bağımsız birim mimarisi sağlanmıştır.
-- Dispatcher business API için merkezi giriş noktası olarak konumlandırılmıştır.
-- Dispatcher/Auth/Product/Order için ayrı NoSQL persistence sınırları oluşturulmuştur.
-- Merkezi yetkilendirme kontrolü dispatcher katmanında uygulanmıştır.
-- Dispatcher için metrik üretimi ve dashboard altyapısı kurulmuştur.
-- Servislerde katmanlı yapı (router/service/repository/schema/model) belirgin hale getirilmiştir.
-- Locust ile 20/50/100 kullanıcı benchmark testleri ve 300 kullanıcı ek stres testi uygulanmıştır.
-- Prometheus ve Grafana üzerinden yük altındaki davranış gözlemlenmiş ve raporlanmıştır.
+## Achievements
 
-## Sınırlılıklar
-- Ana benchmark karşılaştırması 20/50/100 kullanıcı seviyelerine odaklanmıştır; 300 kullanıcı testi karşılaştırma tablosundan ayrı, ek stres testi amacıyla değerlendirilmiştir.
-- 300 kullanıcı seviyesinin üzerinde (ör. 500+) ek kırılma/kapasite testleri bu çalışma kapsamında yapılmamıştır.
-- Authentication endpoint'lerinde diğer endpoint'lere göre daha yüksek gecikme gözlenmiştir.
-- Testler portföy projesi kapsamındaki senaryolar için hazırlanmıştır; tam ölçekli üretim yükünü temsil etmemektedir.
-- Dispatcher tarafında TDD geçmişi daha belirgindir; tüm servislerde aynı düzeyde test odaklı geliştirme zinciri gösterilmemektedir.
-- Dispatcher route tanımları bazı path kombinasyonlarında aşağı servisten `405` dönebilecek şekilde geniş method kaydına sahiptir.
-- Tam kapsamlı uçtan uca entegrasyon senaryoları için ek test genişletme ihtiyacı devam etmektedir.
+- Four-unit architecture delivered: Dispatcher, Auth, Product, and Order services.
+- Dispatcher established as the sole business API entry point.
+- Separate NoSQL persistence boundary per service.
+- Centralized authorization applied at the gateway layer.
+- Prometheus metrics and Grafana dashboard infrastructure set up for the Dispatcher.
+- Layered structure enforced across all services.
+- Locust benchmarks completed at 20/50/100 users with an additional 300-user stress test.
+- Load behavior observed and documented through Prometheus and Grafana.
 
-## Olası Geliştirmeler
-- Auth doğrulama çağrılarını dispatcher içinde daha ileri policy katmanına dönüştürmek
-- Access profile yönetimi için admin endpointleri ve audit trail genişletmek
-- Order servisi için durum geçiş kurallarını (state machine yaklaşımı) detaylandırmak
-- Distributed tracing (request-id, correlation-id) ve merkezi log toplama entegrasyonu eklemek
-- Locust senaryolarını role-based trafik desenleriyle çeşitlendirmek
-- CI pipeline'da test + static analysis + container smoke test adımlarını zorunlu hale getirmek
+## Limitations
 
-## Sonuç
-Bu proje, mikroservis sınırlarını ve gateway yaklaşımını uygulanabilir bir backend mimarisi içinde gösteren portföy odaklı bir örnek sunmaktadır. Mevcut durumda dispatcher merkezli yönlendirme, authz kontrolü, servis bazlı persistence izolasyonu, gözlemlenebilirlik altyapısı ve test temelli geliştirme pratiği (özellikle dispatcher tarafında) somut biçimde mevcuttur.
+- Load tests above 300 concurrent users were not performed in this scope.
+- Auth endpoints consistently show higher latency than other endpoints across all test levels.
+- TDD is most visible on the Dispatcher; the same discipline is not maintained uniformly across all services.
+- Some route registrations on the Dispatcher use broad method coverage, which can result in `405` responses from downstream services for undefined method-resource combinations.
+- End-to-end integration test coverage has room to grow.
+
+## Future Improvements
+
+- Promote auth validation within the Dispatcher to a full policy layer
+- Add admin endpoints and an audit trail for access profile management
+- Formalize order status transitions as a state machine
+- Add distributed tracing (request-id, correlation-id) and centralized log aggregation
+- Diversify Locust scenarios with role-based traffic patterns
+- Make tests, static analysis, and container smoke tests mandatory steps in the CI pipeline
+
+## Conclusion
+
+This project demonstrates microservice boundaries and a gateway-centered architecture in a working backend setup. The Dispatcher-based routing, authorization control, per-service persistence isolation, observability infrastructure, and TDD practices on the Dispatcher side are all concretely implemented and documented.
