@@ -15,7 +15,7 @@
 
 | Name | Role |
 | --- | --- |
-| Hüseyin Erekmen | Dispatcher, authorization, test infrastructure, monitoring, and load testing |
+| Hüseyin Erekmen | Dispatcher, authorization, test infrastructure, monitoring, load testing, and Kubernetes deployment/CI |
 | Rana Karagöl | Auth, Product, and Order services, data models, repository/service layers, and service tests |
 
 ## Last Updated
@@ -634,7 +634,7 @@ Key areas:
 
 | Developer | Primary areas |
 | --- | --- |
-| Hüseyin Erekmen | Dispatcher, authorization, test infrastructure, monitoring, and load testing |
+| Hüseyin Erekmen | Dispatcher, authorization, test infrastructure, monitoring, load testing, and Kubernetes deployment/CI |
 | Rana Karagöl | Auth, Product, and Order services, data models, repository/service layers, and service tests |
 
 Both developers contributed actively to different layers of the architecture.
