@@ -1,5 +1,16 @@
 # Product-Order Microservices
 
+[![k8s-ci](https://github.com/ranakaragol/product-order-microservices/actions/workflows/k8s-ci.yml/badge.svg?branch=main)](https://github.com/ranakaragol/product-order-microservices/actions/workflows/k8s-ci.yml)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-kind-326CE5?logo=kubernetes&logoColor=white)
+![Kustomize](https://img.shields.io/badge/Kustomize-manifests-326CE5?logo=kubernetes&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-monitoring-E6522C?logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-dashboards-F46800?logo=grafana&logoColor=white)
+![Pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+
 ## Developers
 
 | Name | Role |
@@ -9,7 +20,7 @@
 
 ## Last Updated
 
-April 5, 2026
+November 11, 2026
 
 ## Table of Contents
 
