@@ -1,0 +1,108 @@
+{
+  "default-authenticated": {
+    "subject": "default-authenticated",
+    "permissions": [
+      {
+        "resource": "/products",
+        "methods": [
+          "GET"
+        ]
+      },
+      {
+        "resource": "/orders",
+        "methods": [
+          "GET"
+        ]
+      }
+    ]
+  },
+  "dispatcher-user": {
+    "subject": "dispatcher-user",
+    "permissions": [
+      {
+        "resource": "/products",
+        "methods": [
+          "GET",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE"
+        ]
+      },
+      {
+        "resource": "/orders",
+        "methods": [
+          "GET",
+          "POST",
+          "PATCH",
+          "DELETE"
+        ]
+      }
+    ]
+  },
+  "alice": {
+    "subject": "alice",
+    "permissions": [
+      {
+        "resource": "/products",
+        "methods": [
+          "GET",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE"
+        ]
+      },
+      {
+        "resource": "/orders",
+        "methods": [
+          "GET",
+          "POST",
+          "PATCH",
+          "DELETE"
+        ]
+      }
+    ]
+  },
+  "locust-writer": {
+    "subject": "locust-writer",
+    "permissions": [
+      {
+        "resource": "/products",
+        "methods": [
+          "GET",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE"
+        ]
+      },
+      {
+        "resource": "/orders",
+        "methods": [
+          "GET",
+          "POST",
+          "PATCH",
+          "DELETE"
+        ]
+      }
+    ]
+  },
+  "bob": {
+    "subject": "bob",
+    "permissions": [
+      {
+        "resource": "/products",
+        "methods": [
+          "GET"
+        ]
+      },
+      {
+        "resource": "/orders",
+        "methods": [
+          "GET"
+        ]
+      }
+    ]
+  }
+}

@@ -19,6 +19,7 @@ AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8000")
 PRODUCT_SERVICE_URL=os.getenv("PRODUCT_SERVICE_URL", "http://product_service:8000")
 ORDER_SERVICE_URL=os.getenv("ORDER_SERVICE_URL", "http://order_service:8000")
 AUTH_PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+HEALTH_PATH = "/health"
 
 SERVICES={
     "auth":AUTH_SERVICE_URL,
@@ -137,6 +138,11 @@ async def _proxy_resource_request(request: Request, base_url: str, path: str):
 
 
 async def check_auth(request: Request, call_next):
+    # Kubernetes probes hit /health every few seconds; keep them out of
+    # traffic logs and request metrics.
+    if request.url.path == HEALTH_PATH:
+        return await call_next(request)
+
     started_at = perf_counter()
     status_code = await evaluate_authorization(request)
     if status_code == 401:
@@ -153,6 +159,10 @@ async def check_auth(request: Request, call_next):
 
 def read_root():
     return {"message": "Dispatcher Gateway Running"}
+
+
+def health():
+    return {"status": "ok"}
 
 
 def metrics():
@@ -215,6 +225,7 @@ def create_app(
         app.state.request_forwarder = request_forwarder
 
     app.middleware("http")(check_auth)
+    app.add_api_route(HEALTH_PATH, health, methods=["GET"], include_in_schema=False)
     register_gateway_routes(
         app,
         read_root_handler=read_root,

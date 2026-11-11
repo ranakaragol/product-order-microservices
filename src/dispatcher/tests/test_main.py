@@ -888,3 +888,21 @@ async def test_upstream_unavailable_request_is_logged(monkeypatch):
     assert len(fake_logs.entries) == 1
     assert fake_logs.entries[0]["path"] == "/products"
     assert fake_logs.entries[0]["status_code"] == 503
+
+
+async def test_health_endpoint_returns_ok_without_token_and_is_not_logged():
+    from app.main import create_app
+
+    fake_logs = FakeLogsCollection()
+    health_app = create_app(
+        access_profile_repository=FakeAccessProfileRepository(),
+        logs_collection=fake_logs,
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=health_app), base_url="http://test") as ac:
+        response = await ac.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    await _wait_for_log_entries(fake_logs, expected_count=1, timeout_seconds=0.1)
+    assert fake_logs.entries == []

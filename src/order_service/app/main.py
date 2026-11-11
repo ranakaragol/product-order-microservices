@@ -10,3 +10,9 @@ app.include_router(orders_router)
 def root():
     return {"message": "Order Service is running"}
 
+
+@app.get("/health")
+def health():
+    # Used by Kubernetes liveness/readiness probes.
+    return {"status": "ok"}
+

@@ -1,0 +1,108 @@
+# dispatcher: the API gateway and the only entry point for clients.
+#
+# The Service is ClusterIP like the others; locally we reach it with
+#   kubectl -n product-order port-forward svc/dispatcher 8080:8000
+# On a real cloud cluster you would expose it with an Ingress (or a Service of
+# type LoadBalancer) instead.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dispatcher
+  labels:
+    app: dispatcher
+spec:
+  type: ClusterIP
+  selector:
+    app: dispatcher
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dispatcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dispatcher
+  template:
+    metadata:
+      labels:
+        app: dispatcher
+    spec:
+      # Init containers run to completion before the app container starts.
+      # The dispatcher seeds its access profiles into Mongo at startup and
+      # silently skips that if Mongo is not reachable yet (every user would then
+      # get 403). So wait until Mongo answers a ping. It reuses the mongo image
+      # because it ships with the mongosh client.
+      initContainers:
+        - name: wait-for-mongo
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              until mongosh --quiet --host mongo --eval 'db.adminCommand("ping")' >/dev/null 2>&1; do
+                echo "waiting for mongo..."
+                sleep 2
+              done
+          # mongosh runs on Node.js; with a 128Mi limit it was OOMKilled
+          # (exit code 137), so it gets 256Mi.
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      containers:
+        - name: dispatcher
+          image: product-order/dispatcher
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # envFrom loads every key of the ConfigMap as an env variable
+          # (AUTH_SERVICE_URL, PRODUCT_SERVICE_URL, ORDER_SERVICE_URL, ...).
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: MONGO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DISPATCHER_MONGO_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SECRET_KEY
+            # Role/permission profiles seeded into Mongo at startup. The JSON
+            # lives in config/access-profiles.json (see kustomization.yaml).
+            - name: DISPATCHER_ACCESS_PROFILES_BOOTSTRAP
+              valueFrom:
+                configMapKeyRef:
+                  name: dispatcher-access-profiles
+                  key: access-profiles.json
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

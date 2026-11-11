@@ -1,0 +1,7 @@
+# kind = "Kubernetes IN Docker": each Kubernetes node is a Docker container.
+# One control-plane node is enough for this project; it also runs our pods.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: product-order
+nodes:
+  - role: control-plane

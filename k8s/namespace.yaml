@@ -1,0 +1,8 @@
+# A Namespace is a logical "folder" inside the cluster. Everything for this
+# project lives in "product-order", so it can be listed or deleted in one go:
+#   kubectl get all -n product-order
+#   kubectl delete namespace product-order
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: product-order

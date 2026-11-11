@@ -1,0 +1,79 @@
+# auth-service: issues and verifies JWTs. Internal only (ClusterIP).
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  labels:
+    app: auth-service
+spec:
+  type: ClusterIP
+  selector:
+    app: auth-service      # traffic goes to pods with this label
+  ports:
+    - name: http
+      port: 8000           # port other pods call: http://auth-service:8000
+      targetPort: 8000     # port the container listens on
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          # Tag is set in kustomization.yaml (images:). IfNotPresent makes the
+          # node use the image we pushed with "kind load docker-image" instead
+          # of trying to pull it from a registry.
+          image: product-order/auth-service
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MONGO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: AUTH_MONGO_URL
+            - name: BCRYPT_ROUNDS
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: AUTH_BCRYPT_ROUNDS
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SECRET_KEY
+          # readiness: "may this pod receive traffic?" (removed from the Service
+          #            endpoints while failing)
+          # liveness:  "is this pod stuck?" (restarted by the kubelet when failing)
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          # requests: what the scheduler reserves on a node.
+          # limits:   hard ceiling; over the memory limit the container is OOMKilled.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

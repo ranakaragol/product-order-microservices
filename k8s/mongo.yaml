@@ -1,0 +1,81 @@
+# MongoDB as a StatefulSet.
+#
+# Why a StatefulSet and not a Deployment?
+#   - Each replica gets a stable name (mongo-0) and its own PersistentVolumeClaim
+#     from volumeClaimTemplates, so data survives pod restarts.
+#   - A Deployment treats pods as interchangeable, which fits stateless APIs,
+#     not databases.
+#
+# Docker Compose runs one Mongo container per service. Here we run a single
+# Mongo instance and every service uses its own database (auth_db, product_db,
+# order_db, dispatcher_db). That keeps the local cluster small; the trade-off is
+# logical isolation instead of separate database servers.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  labels:
+    app: mongo
+spec:
+  # Headless service (no cluster IP): gives the StatefulSet pods stable DNS
+  # names such as mongo-0.mongo. "mongo" itself also resolves to the pod.
+  clusterIP: None
+  selector:
+    app: mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  serviceName: mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7.0
+          ports:
+            - containerPort: 27017
+          # Mongo has no HTTP endpoint, so the probes just check that the
+          # TCP port accepts connections.
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+  # One PVC per replica (data-mongo-0). kind ships a default "standard"
+  # StorageClass that provisions a local directory on the node.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

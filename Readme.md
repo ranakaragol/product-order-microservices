@@ -24,24 +24,25 @@ April 5, 2026
 9. [Database Isolation](#database-isolation)
 10. [Network Isolation](#network-isolation)
 11. [Docker and Orchestration](#docker-and-orchestration)
-12. [API Design](#api-design)
-13. [Richardson Maturity Model Level 2](#richardson-maturity-model-level-2)
-14. [Complexity Notes](#complexity-notes)
-15. [Endpoint Summary](#endpoint-summary)
-16. [Layered Architecture](#layered-architecture)
-17. [Class Diagram](#class-diagram)
-18. [Request Flows](#request-flows)
-19. [Sequence Diagrams](#sequence-diagrams)
-20. [Testing Approach](#testing-approach)
-21. [TDD on the Dispatcher](#tdd-on-the-dispatcher)
-22. [Development Process Summary](#development-process-summary)
-23. [Contribution Breakdown](#contribution-breakdown)
-24. [Monitoring and Observability](#monitoring-and-observability)
-25. [Load Testing](#load-testing)
-26. [Achievements](#achievements)
-27. [Limitations](#limitations)
-28. [Future Improvements](#future-improvements)
-29. [Conclusion](#conclusion)
+12. [Run on Kubernetes (kind)](#run-on-kubernetes-kind)
+13. [API Design](#api-design)
+14. [Richardson Maturity Model Level 2](#richardson-maturity-model-level-2)
+15. [Complexity Notes](#complexity-notes)
+16. [Endpoint Summary](#endpoint-summary)
+17. [Layered Architecture](#layered-architecture)
+18. [Class Diagram](#class-diagram)
+19. [Request Flows](#request-flows)
+20. [Sequence Diagrams](#sequence-diagrams)
+21. [Testing Approach](#testing-approach)
+22. [TDD on the Dispatcher](#tdd-on-the-dispatcher)
+23. [Development Process Summary](#development-process-summary)
+24. [Contribution Breakdown](#contribution-breakdown)
+25. [Monitoring and Observability](#monitoring-and-observability)
+26. [Load Testing](#load-testing)
+27. [Achievements](#achievements)
+28. [Limitations](#limitations)
+29. [Future Improvements](#future-improvements)
+30. [Conclusion](#conclusion)
 
 ---
 
@@ -81,6 +82,8 @@ This project addresses these problems through clear microservice boundaries and 
 | MongoDB client | Motor | Async database access |
 | Containerization | Docker | Isolated service execution |
 | Orchestration | Docker Compose | Multi-service and profile management |
+| Kubernetes | kind, Kustomize | Local Kubernetes cluster and manifest management |
+| CI | GitHub Actions | Deploys to a kind cluster and smoke tests every push/PR |
 | Testing | Pytest | Service and Dispatcher behavior tests |
 | HTTP client | httpx | Dispatcher proxy and test client |
 | Auth | python-jose, bcrypt | JWT generation/validation and password hashing |
@@ -239,6 +242,64 @@ docker compose -f src/docker-compose.yml --profile test run --rm product_tests
 docker compose -f src/docker-compose.yml --profile test run --rm order_tests
 ```
 
+## Run on Kubernetes (kind)
+
+The same images also run on a local Kubernetes cluster created with [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker). The manifests are plain YAML managed with Kustomize, which is built into `kubectl`.
+
+### Prerequisites
+
+- Docker Desktop (running)
+- `kind` (`winget install Kubernetes.kind` on Windows, `brew install kind` on macOS)
+- `kubectl` (ships with Docker Desktop)
+- Git Bash on Windows, to run the shell scripts
+
+### One command
+
+```bash
+./scripts/kind-up.sh
+```
+
+The script:
+
+1. creates the `product-order` kind cluster from `kind-config.yaml` (skipped if it exists),
+2. builds the `runtime` stage of each service image and tags it `product-order/<service>:dev`,
+3. copies the images into the cluster node with `kind load docker-image` (no registry needed) and pre-pulls `mongo:7.0` inside the node,
+4. applies the manifests with `kubectl apply -k k8s/`,
+5. waits for MongoDB and the four Deployments to finish rolling out,
+6. runs `scripts/smoke-test.sh`: port-forwards the dispatcher and checks `/health`, register/login, a `401` without a token, and creating and listing a product with a JWT.
+
+Use the API yourself, and delete the cluster when done:
+
+```bash
+kubectl -n product-order port-forward svc/dispatcher 8080:8000
+curl http://localhost:8080/health
+./scripts/kind-up.sh down
+```
+
+### What is in `k8s/`
+
+| File | Kubernetes objects | Notes |
+| --- | --- | --- |
+| `namespace.yaml` | Namespace `product-order` | Everything else lives in it |
+| `mongo.yaml` | StatefulSet + headless Service | One MongoDB with a 1Gi PersistentVolumeClaim; each service keeps its own database |
+| `auth-service.yaml`, `product-service.yaml`, `order-service.yaml`, `dispatcher.yaml` | Deployment + ClusterIP Service each | Readiness/liveness probes on `/health`, CPU/memory requests and limits. The dispatcher also has a `wait-for-mongo` init container, because it seeds its access profiles into MongoDB at startup |
+| `config/app.env` | ConfigMap `app-config` | Service URLs and Mongo connection strings |
+| `config/access-profiles.json` | ConfigMap `dispatcher-access-profiles` | The dispatcher's role/permission seed data |
+| `config/secrets.dev.env` | Secret `app-secrets` | JWT signing key. **Dev-only placeholder**, not a real secret |
+| `kustomization.yaml` | — | Namespace, common labels, ConfigMap/Secret generators, image tags |
+
+Only the dispatcher is meant to be called from outside; the internal services are `ClusterIP` and reachable only inside the cluster, which mirrors the Docker Compose network isolation.
+
+Differences from Docker Compose:
+
+- Compose runs one MongoDB container per service; the cluster runs one MongoDB instance with a separate database per service, to keep the local cluster small.
+- Kubernetes Service names use dashes (`auth-service`), so the internal URLs differ from Compose (`auth_service`).
+- Prometheus and Grafana are not deployed to the cluster yet; use the Compose `monitoring` profile for them.
+
+### CI
+
+`.github/workflows/k8s-ci.yml` runs on every push to `main` and on pull requests. It renders the Kustomize output, creates a kind cluster with `helm/kind-action`, runs `scripts/kind-up.sh` (build, load, apply, rollout, smoke test), and dumps pod status, events and logs if anything fails.
+
 ## API Design
 
 The API follows a resource-oriented design and presents a unified surface through the Dispatcher.
@@ -282,7 +343,8 @@ These notes should be read alongside the load test and monitoring results, where
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| GET | `/` | Dispatcher health check |
+| GET | `/` | Dispatcher root message |
+| GET | `/health` | Liveness/readiness check (not logged, no token needed) |
 | GET | `/metrics` | Prometheus metrics endpoint |
 | GET/POST/PUT/PATCH/DELETE | `/auth/{path}` | Proxy to Auth Service |
 | GET | `/products` | List products |
@@ -302,6 +364,7 @@ These notes should be read alongside the load test and monitoring results, where
 | Service | Endpoints |
 | --- | --- |
 | Auth Service | `POST /register`, `POST /login`, `GET /verify-token` |
+| All services | `GET /health` (used by Kubernetes probes) |
 | Product Service | `GET/POST /products`, `GET/PUT/PATCH/DELETE /products/{id}` |
 | Order Service | `GET/POST /orders`, `GET/PATCH/DELETE /orders/{id}` |
 

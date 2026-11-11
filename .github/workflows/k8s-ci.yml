@@ -1,0 +1,53 @@
+# Deploys the system to a throwaway kind cluster on every push/PR and runs the
+# smoke test. It reuses scripts/kind-up.sh, so CI does exactly what a developer
+# does locally.
+name: k8s-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  kind-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLUSTER_NAME: product-order
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Fail fast on broken YAML before spending time on a cluster.
+      - name: Render Kustomize manifests
+        run: kubectl kustomize k8s/ > /dev/null
+
+      # Installs kind and creates the cluster from our config.
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: ${{ env.CLUSTER_NAME }}
+          config: kind-config.yaml
+          wait: 120s
+
+      # Builds the images, loads them into kind, applies k8s/, waits for the
+      # rollout and runs scripts/smoke-test.sh. The cluster already exists, so
+      # the script skips creating it.
+      - name: Build, deploy and smoke test
+        run: bash scripts/kind-up.sh
+
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          set -x
+          kubectl get all,pvc,configmap -n product-order -o wide || true
+          kubectl get events -n product-order --sort-by=.lastTimestamp || true
+          kubectl describe pods -n product-order || true
+          for pod in $(kubectl get pods -n product-order -o name); do
+            echo "::group::logs $pod"
+            kubectl logs -n product-order "$pod" --all-containers --tail=200 || true
+            kubectl logs -n product-order "$pod" --all-containers --previous --tail=100 2>/dev/null || true
+            echo "::endgroup::"
+          done
+          cat /tmp/port-forward.log || true

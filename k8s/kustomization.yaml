@@ -1,0 +1,58 @@
+# Kustomize entry point. Apply everything with:
+#   kubectl apply -k k8s/
+# Preview the final YAML Kustomize produces (nothing is applied):
+#   kubectl kustomize k8s/
+#
+# Kustomize builds plain YAML from these files without a template language.
+# It is built into kubectl, and the usual next step is base/ + overlays/
+# (e.g. overlays/dev, overlays/prod) that patch replicas, image tags or limits
+# per environment.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Puts every resource below into this namespace.
+namespace: product-order
+
+resources:
+  - namespace.yaml
+  - mongo.yaml
+  - auth-service.yaml
+  - product-service.yaml
+  - order-service.yaml
+  - dispatcher.yaml
+
+# Added to every resource and pod template (not to selectors, which are
+# immutable once a Deployment exists).
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: product-order
+    includeTemplates: true
+
+# Generators turn files into a ConfigMap/Secret. Kustomize adds a content hash
+# to the name (app-config-7h2k9...) and rewrites every reference to it, so a
+# config change produces a new name and the Deployments roll out new pods.
+configMapGenerator:
+  - name: app-config
+    envs:
+      - config/app.env
+  - name: dispatcher-access-profiles
+    files:
+      - config/access-profiles.json
+
+secretGenerator:
+  - name: app-secrets
+    envs:
+      - config/secrets.dev.env
+
+# Sets the image tag in one place. The kind script builds and loads images
+# with this tag; CI could set a commit SHA here with
+# "kustomize edit set image product-order/dispatcher=...:<sha>".
+images:
+  - name: product-order/auth-service
+    newTag: dev
+  - name: product-order/product-service
+    newTag: dev
+  - name: product-order/order-service
+    newTag: dev
+  - name: product-order/dispatcher
+    newTag: dev

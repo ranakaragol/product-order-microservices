@@ -7,3 +7,9 @@ app.include_router(products_router)
 @app.get("/")
 def root():
     return {"message": "service running"}
+
+
+@app.get("/health")
+def health():
+    # Used by Kubernetes liveness/readiness probes.
+    return {"status": "ok"}
